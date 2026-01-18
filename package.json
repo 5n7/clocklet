@@ -1,0 +1,11 @@
+{
+  "name": "clocklet",
+  "version": "1.0.0",
+  "scripts": {
+    "format": "prettier --write 'docs/**/*.md'"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "devDependencies": {
+    "prettier": "^3.8.0"
+  }
+}
