@@ -10,6 +10,7 @@ enum SettingsKey: String {
     case reminderEnabled
     case reminderRepeatMinutes
     case stopOnSleep
+    case clockEventNotificationEnabled
 }
 
 final class SettingsManager: Sendable {
@@ -37,5 +38,10 @@ final class SettingsManager: Sendable {
     var stopOnSleep: Bool {
         get { defaults.object(forKey: SettingsKey.stopOnSleep.rawValue) as? Bool ?? true }
         set { defaults.set(newValue, forKey: SettingsKey.stopOnSleep.rawValue) }
+    }
+
+    var clockEventNotificationEnabled: Bool {
+        get { defaults.object(forKey: SettingsKey.clockEventNotificationEnabled.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: SettingsKey.clockEventNotificationEnabled.rawValue) }
     }
 }

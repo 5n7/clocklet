@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var reminderThreshold = SettingsManager.shared.reminderThresholdMinutes
     @State private var reminderRepeat: Int = SettingsManager.shared.reminderRepeatMinutes ?? 0
     @State private var stopOnSleep = SettingsManager.shared.stopOnSleep
+    @State private var clockEventNotificationEnabled = SettingsManager.shared.clockEventNotificationEnabled
 
     private let thresholdOptions = [15, 30, 45, 60, 90, 120, 180, 240, 300, 360, 480]
     private let repeatOptions = [0, 15, 30, 60] // 0 = off
@@ -58,6 +59,11 @@ struct SettingsView: View {
 
             // Behavior Section
             Section("Behavior") {
+                Toggle("Notify on Clock In/Out", isOn: $clockEventNotificationEnabled)
+                    .onChange(of: clockEventNotificationEnabled) { _, newValue in
+                        SettingsManager.shared.clockEventNotificationEnabled = newValue
+                    }
+
                 Toggle("Stop tracking on sleep", isOn: $stopOnSleep)
                     .onChange(of: stopOnSleep) { _, newValue in
                         SettingsManager.shared.stopOnSleep = newValue

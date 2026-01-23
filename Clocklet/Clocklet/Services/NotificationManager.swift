@@ -39,6 +39,43 @@ final class NotificationManager {
         try? await center.add(request)
     }
 
+    func sendClockInNotification() async {
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Clocklet"
+        let timeString = DateFormatters.timeOnly.string(from: Date())
+        content.body = "Clocked in at \(timeString)"
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+
+        try? await center.add(request)
+    }
+
+    func sendClockOutNotification(durationSeconds: Int) async {
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Clocklet"
+        content.body = "Clocked out. Duration: \(DurationFormatter.format(durationSeconds))"
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+
+        try? await center.add(request)
+    }
+
     func showIncompleteSessionNotification() async {
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized else { return }

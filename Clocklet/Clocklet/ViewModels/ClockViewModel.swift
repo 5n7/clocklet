@@ -132,6 +132,12 @@ final class ClockViewModel {
         data.currentSession = CurrentSession(clockIn: Date())
         save()
         reminderScheduler.start()
+
+        if SettingsManager.shared.clockEventNotificationEnabled {
+            Task {
+                await notificationManager.sendClockInNotification()
+            }
+        }
     }
 
     func clockOut() {
@@ -143,6 +149,12 @@ final class ClockViewModel {
             data.currentSession = nil
             save()
             reminderScheduler.stop()
+
+            if SettingsManager.shared.clockEventNotificationEnabled {
+                Task {
+                    await notificationManager.sendClockOutNotification(durationSeconds: entry.durationSeconds)
+                }
+            }
         } catch {
             lastError = error
         }
