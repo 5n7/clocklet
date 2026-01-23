@@ -3,7 +3,24 @@
 //  Clocklet
 //
 
+import AppKit
 import SwiftUI
+
+private struct ArrowCursorView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = CursorNSView()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private class CursorNSView: NSView {
+        override func resetCursorRects() {
+            super.resetCursorRects()
+            addCursorRect(bounds, cursor: .arrow)
+        }
+    }
+}
 
 struct MenuBarView: View {
     @Bindable var viewModel: ClockViewModel
@@ -111,5 +128,6 @@ struct MenuBarView: View {
         }
         .frame(width: 200)
         .padding(.vertical, 8)
+        .background(ArrowCursorView())
     }
 }
