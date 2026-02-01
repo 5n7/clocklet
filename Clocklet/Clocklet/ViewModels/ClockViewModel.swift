@@ -63,6 +63,47 @@ final class ClockViewModel {
         return completedDuration
     }
 
+    var lastMonthDuration: TimeInterval {
+        let calendar = Calendar.current
+        guard let lastMonth = calendar.date(byAdding: .month, value: -1, to: Date()) else {
+            return 0
+        }
+        return data.entries
+            .filter { calendar.isDate($0.clockIn, equalTo: lastMonth, toGranularity: .month) }
+            .reduce(0) { $0 + TimeInterval($1.durationSeconds) }
+    }
+
+    /// Get monthly statistics for the specified number of months
+    func monthlyStatistics(months: Int = 12) -> [MonthlyStatistics] {
+        let calendar = Calendar.current
+        let now = Date()
+
+        // Create a dictionary to store durations by year-month key
+        var durationsByMonth: [String: Int] = [:]
+
+        // Group entries by month
+        for entry in data.entries {
+            let components = calendar.dateComponents([.year, .month], from: entry.clockIn)
+            guard let year = components.year, let month = components.month else { continue }
+            let key = MonthlyStatistics.makeKey(year: year, month: month)
+            durationsByMonth[key, default: 0] += entry.durationSeconds
+        }
+
+        // Generate statistics for the past N months (including current month)
+        var statistics: [MonthlyStatistics] = []
+        for i in 0..<months {
+            guard let date = calendar.date(byAdding: .month, value: -i, to: now) else { continue }
+            let components = calendar.dateComponents([.year, .month], from: date)
+            guard let year = components.year, let month = components.month else { continue }
+            let key = MonthlyStatistics.makeKey(year: year, month: month)
+            let totalSeconds = durationsByMonth[key] ?? 0
+            statistics.append(MonthlyStatistics(year: year, month: month, totalSeconds: totalSeconds))
+        }
+
+        // Reverse to get chronological order (oldest first)
+        return statistics.reversed()
+    }
+
     /// Entries grouped by date for history view
     var entriesByDate: [(date: String, entries: [TimeEntry])] {
         Dictionary(grouping: data.entries, by: { $0.date })

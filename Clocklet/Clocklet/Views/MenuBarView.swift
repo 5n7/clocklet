@@ -74,6 +74,17 @@ struct MenuBarView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
 
+            // Last month's duration
+            HStack {
+                Text("Last Month:")
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text(DurationFormatter.format(viewModel.lastMonthDuration))
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+
             // Current session info (if tracking)
             if viewModel.isTracking, let session = viewModel.data.currentSession {
                 HStack {
@@ -97,6 +108,22 @@ struct MenuBarView: View {
             }) {
                 HStack {
                     Text("History")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            // Statistics
+            Button(action: {
+                openWindow(id: "statistics")
+                NSApp.activate(ignoringOtherApps: true)
+            }) {
+                HStack {
+                    Text("Statistics")
                     Spacer()
                     Image(systemName: "chevron.right")
                         .foregroundColor(.secondary)

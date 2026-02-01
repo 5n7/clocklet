@@ -41,4 +41,18 @@ enum DateFormatters {
         formatter.dateFormat = "M/d"
         return formatter
     }()
+
+    /// Display formatter for month and year (e.g., "Jan 2026")
+    static let monthYear: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM yyyy"
+        return formatter
+    }()
+
+    /// Display formatter for short month (e.g., "Jan")
+    static let shortMonth: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
+        return formatter
+    }()
 }
