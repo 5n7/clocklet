@@ -28,6 +28,13 @@ struct MenuBarView: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
+        // TimelineView ensures time-dependent properties update every second
+        TimelineView(.periodic(from: .now, by: 1.0)) { _ in
+            menuContent
+        }
+    }
+
+    private var menuContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Clock In/Out Button
             Button(action: { viewModel.toggle() }) {
