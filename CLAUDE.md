@@ -44,7 +44,7 @@ xcodebuild -scheme Clocklet -configuration Debug build
 xcodebuild -scheme Clocklet test
 
 # Format docs
-pnpm format
+dprint fmt
 ```
 
 ## Key Implementation Notes
@@ -65,6 +65,7 @@ This project follows a documentation-first approach with reviewer agents for qua
 ### 1. PRD First
 
 Before implementing features:
+
 1. Update `docs/prd.md` with requirements
 2. Include detailed specifications: UI behavior, data structures, edge cases
 3. Keep both language versions in sync
@@ -72,6 +73,7 @@ Before implementing features:
 ### 2. Technical Design
 
 After PRD is finalized:
+
 1. Update `docs/technical-design.md`
 2. Document: data models, component design, state management, key flows
 3. Include code snippets showing the expected implementation
@@ -114,6 +116,7 @@ Custom agents are defined in `.claude/agents/` for specialized reviews:
 ### swift-macos-code-reviewer
 
 Technical code review for Swift/macOS:
+
 - Swift best practices and concurrency patterns
 - SwiftUI state management
 - Memory management and retain cycles
@@ -124,6 +127,7 @@ Technical code review for Swift/macOS:
 ### prd-implementation-reconciler
 
 Product-level consistency check:
+
 - Verify implementation matches PRD specifications
 - Check UI behavior alignment
 - Validate feature completeness
@@ -133,6 +137,7 @@ Product-level consistency check:
 ### tech-decision-reviewer
 
 Technical design review:
+
 - Architecture decisions
 - Technology choices
 - System design evaluation
@@ -142,6 +147,7 @@ Technical design review:
 ### requirements-reviewer
 
 Requirements analysis:
+
 - PRD review and summarization
 - Development guidelines extraction
 

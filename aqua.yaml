@@ -3,4 +3,4 @@ registries:
   - type: standard
     ref: v4.457.0 # renovate: depName=aquaproj/aqua-registry
 packages:
-  - name: pnpm/pnpm@v10.28.0
+  - name: dprint/dprint@0.53.0

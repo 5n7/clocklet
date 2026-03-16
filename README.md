@@ -14,7 +14,7 @@ A lightweight macOS menu bar app for tracking work hours. Designed for freelance
 
 ## Screenshots
 
-*Coming soon*
+_Coming soon_
 
 ## Requirements
 
@@ -40,7 +40,7 @@ A lightweight macOS menu bar app for tracking work hours. Designed for freelance
 
 ### Releases
 
-*Coming soon*
+_Coming soon_
 
 ## Usage
 
@@ -56,6 +56,7 @@ Set a global shortcut in Settings to toggle clock in/out from anywhere.
 ### Data Storage
 
 Your time entries are stored locally at:
+
 ```
 ~/Library/Application Support/Clocklet/data.json
 ```
