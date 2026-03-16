@@ -11,6 +11,8 @@ enum SettingsKey: String {
   case reminderRepeatMinutes
   case stopOnSleep
   case clockEventNotificationEnabled
+  case hourlyRateEnabled
+  case hourlyRate
 }
 
 final class SettingsManager: Sendable {
@@ -45,5 +47,19 @@ final class SettingsManager: Sendable {
       defaults.object(forKey: SettingsKey.clockEventNotificationEnabled.rawValue) as? Bool ?? true
     }
     set { defaults.set(newValue, forKey: SettingsKey.clockEventNotificationEnabled.rawValue) }
+  }
+
+  var hourlyRateEnabled: Bool {
+    get { defaults.object(forKey: SettingsKey.hourlyRateEnabled.rawValue) as? Bool ?? false }
+    set { defaults.set(newValue, forKey: SettingsKey.hourlyRateEnabled.rawValue) }
+  }
+
+  var hourlyRate: Int {
+    get { defaults.object(forKey: SettingsKey.hourlyRate.rawValue) as? Int ?? 0 }
+    set { defaults.set(newValue, forKey: SettingsKey.hourlyRate.rawValue) }
+  }
+
+  var isEarningsEnabled: Bool {
+    hourlyRateEnabled && hourlyRate > 0
   }
 }

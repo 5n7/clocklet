@@ -174,7 +174,38 @@ View History →
 | Delete   | Trigger delete dialog |
 | Escape   | Clear all selections  |
 
-### 8. Settings Feature
+### 8. Hourly Rate Feature
+
+| Item           | Details                                                                                        |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| Enable/Disable | Toggle to show/hide earnings display                                                           |
+| Hourly Rate    | User-configurable rate in JPY (integer, ≥ 0)                                                   |
+| Calculation    | Earnings = hourly_rate × (total_minutes / 60), per Japanese labor law (minute-level precision) |
+| Rounding       | Seconds truncated to whole minutes, then floor to integer (切り捨て)                           |
+| Display Format | Yen symbol with comma-separated number (e.g., "¥ 5,250")                                       |
+
+#### Calculation Details
+
+Japanese labor law requires wage calculation at minute-level granularity:
+
+- **Formula**: `earnings = hourly_rate × (total_minutes / 60)` where total_minutes = floor(total_seconds / 60)
+- **Rounding**: Seconds truncated to whole minutes first, then result floored to integer (切り捨て)
+- **Example**: Hourly rate ¥ 1,500, worked 3h 25m 59s → total_minutes = 205 → 1,500 × (205 / 60) = ¥ 5,125
+
+#### Display Locations
+
+| Location              | Display Format                                         |
+| --------------------- | ------------------------------------------------------ |
+| Menu Bar (Today)      | "Today: 3h 30m" with "¥ 5,250" below                   |
+| Menu Bar (This Month) | "This Month: 42h 15m" with "¥ 63,375" below            |
+| Menu Bar (Last Month) | "Last Month: 38h 00m" with "¥ 57,000" below            |
+| History (per entry)   | "09:00 - 12:30 3h 30m" with "¥ 5,250" below            |
+| History (daily total) | Date header shows daily total earnings                 |
+| Statistics            | Tab switcher (Hours / Earnings) with chart and summary |
+
+**Note:** Earnings are only shown when the hourly rate feature is enabled and rate > 0.
+
+### 9. Settings Feature
 
 | Setting Item             | Details                                    | Default Value |
 | ------------------------ | ------------------------------------------ | ------------- |
@@ -184,6 +215,8 @@ View History →
 | Reminder Repeat Interval | Interval for repeated reminders            | Off           |
 | Launch at Login          | Auto-start on Mac boot                     | Disabled      |
 | Stop on Sleep            | Automatically clock out when system sleeps | Enabled       |
+| Hourly Rate Enable       | Toggle earnings display                    | Disabled      |
+| Hourly Rate              | Rate in JPY per hour                       | 0             |
 
 ## System Behavior
 
@@ -262,8 +295,10 @@ View History →
 ┌─────────────────────────────┐
 │ ● Clock Out                │  ← When currently In state (green indicator)
 ├─────────────────────────────┤
-│ Today: 2h 30m              │
-│ This Month: 38h 45m        │
+│ Today:          2h 30m     │  ← Earnings shown as caption below
+│                  ¥ 3,750   │     when hourly rate enabled
+│ This Month:    38h 45m     │
+│                 ¥ 58,125   │
 │ Started: 14:00             │  ← Shows current session start time
 ├─────────────────────────────┤
 │ History                  → │
@@ -277,8 +312,10 @@ View History →
 ┌─────────────────────────────┐
 │ ○ Clock In                 │  ← When currently Out state (gray indicator)
 ├─────────────────────────────┤
-│ Today: 2h 30m              │
-│ This Month: 38h 45m        │
+│ Today:          2h 30m     │
+│                  ¥ 3,750   │
+│ This Month:    38h 45m     │
+│                 ¥ 58,125   │
 ├─────────────────────────────┤
 │ History                  → │
 │ Settings                 → │
@@ -323,5 +360,5 @@ The following are out of scope for the initial version but may be considered in 
 
 ---
 
-_Document Version: 1.4_
-_Last Updated: 2026-01-18_
+_Document Version: 1.5_
+_Last Updated: 2026-03-16_

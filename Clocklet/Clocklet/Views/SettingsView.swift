@@ -18,6 +18,11 @@ struct SettingsView: View {
   @State private var stopOnSleep = SettingsManager.shared.stopOnSleep
   @State private var clockEventNotificationEnabled = SettingsManager.shared
     .clockEventNotificationEnabled
+  @State private var hourlyRateEnabled = SettingsManager.shared.hourlyRateEnabled
+  @State private var hourlyRateText: String = {
+    let rate = SettingsManager.shared.hourlyRate
+    return rate > 0 ? "\(rate)" : ""
+  }()
 
   private let thresholdOptions = [15, 30, 45, 60, 90, 120, 180, 240, 300, 360, 480]
   private let repeatOptions = [0, 15, 30, 60]  // 0 = off
@@ -58,6 +63,39 @@ struct SettingsView: View {
         }
       }
 
+      // Hourly Rate Section
+      Section("Hourly Rate") {
+        Toggle("Enable earnings display", isOn: $hourlyRateEnabled)
+          .onChange(of: hourlyRateEnabled) { _, newValue in
+            SettingsManager.shared.hourlyRateEnabled = newValue
+          }
+
+        if hourlyRateEnabled {
+          HStack {
+            Text("Rate")
+            Spacer()
+            Text("¥")
+              .foregroundColor(.secondary)
+            TextField("", text: $hourlyRateText, prompt: Text("0"))
+              .monospacedDigit()
+              .frame(width: 80)
+              .multilineTextAlignment(.trailing)
+              .textFieldStyle(.roundedBorder)
+              .onChange(of: hourlyRateText) { _, newValue in
+                let filtered = newValue.filter { $0.isNumber }
+                let clamped = min(Int(filtered) ?? 0, 1_000_000)
+                let result = filtered.isEmpty ? "" : "\(clamped)"
+                if result != newValue {
+                  hourlyRateText = result
+                }
+                SettingsManager.shared.hourlyRate = clamped
+              }
+            Text("/ hour")
+              .foregroundColor(.secondary)
+          }
+        }
+      }
+
       // Behavior Section
       Section("Behavior") {
         Toggle("Notify on Clock In/Out", isOn: $clockEventNotificationEnabled)
@@ -84,7 +122,7 @@ struct SettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .frame(width: 400, height: 350)
+    .frame(width: 400, height: 450)
   }
 
   private func formatMinutes(_ minutes: Int) -> String {

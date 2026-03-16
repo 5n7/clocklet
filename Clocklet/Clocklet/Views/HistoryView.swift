@@ -132,6 +132,8 @@ struct HistoryView: View {
     .frame(minWidth: 400, minHeight: 300)
   }
 
+  private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
+
   private func toggleSelection(_ id: TimeEntry.ID) {
     if selectedEntries.contains(id) {
       selectedEntries.remove(id)
@@ -145,13 +147,33 @@ struct HistoryView: View {
   }
 
   private func sectionHeader(for date: String, entries: [TimeEntry]) -> some View {
-    HStack {
+    let totalSeconds = entries.reduce(0) { $0 + $1.durationSeconds }
+    return HStack(spacing: 6) {
       Text(formatDateHeader(date))
       Spacer()
-      Text(DurationFormatter.format(entries.reduce(0) { $0 + $1.durationSeconds }))
+      Text(DurationFormatter.format(totalSeconds))
         .foregroundColor(.secondary)
+      if showEarnings {
+        Text("·")
+          .foregroundColor(.secondary.opacity(0.5))
+        Text(
+          EarningsCalculator.format(
+            EarningsCalculator.calculate(
+              hourlyRate: SettingsManager.shared.hourlyRate,
+              durationSeconds: TimeInterval(totalSeconds)
+            )
+          )
+        )
+        .foregroundColor(.orange)
+      }
     }
   }
+
+  private static let dateHeaderFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy/MM/dd (E)"
+    return formatter
+  }()
 
   private func formatDateHeader(_ dateString: String) -> String {
     guard let date = DateFormatters.dateOnly.date(from: dateString) else {
@@ -164,15 +186,15 @@ struct HistoryView: View {
     } else if calendar.isDateInYesterday(date) {
       return "Yesterday"
     } else {
-      let formatter = DateFormatter()
-      formatter.dateFormat = "yyyy/MM/dd (E)"
-      return formatter.string(from: date)
+      return Self.dateHeaderFormatter.string(from: date)
     }
   }
 }
 
 struct HistoryRowView: View {
   let entry: TimeEntry
+
+  private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
 
   var body: some View {
     HStack {
@@ -192,9 +214,25 @@ struct HistoryRowView: View {
 
       Spacer()
 
-      Text(DurationFormatter.format(entry.durationSeconds))
-        .foregroundColor(.secondary)
-        .monospacedDigit()
+      VStack(alignment: .trailing, spacing: 2) {
+        Text(DurationFormatter.format(entry.durationSeconds))
+          .foregroundColor(.secondary)
+          .monospacedDigit()
+
+        if showEarnings {
+          Text(
+            EarningsCalculator.format(
+              EarningsCalculator.calculate(
+                hourlyRate: SettingsManager.shared.hourlyRate,
+                durationSeconds: TimeInterval(entry.durationSeconds)
+              )
+            )
+          )
+          .font(.caption)
+          .foregroundColor(.orange)
+          .monospacedDigit()
+        }
+      }
     }
     .padding(.vertical, 2)
   }

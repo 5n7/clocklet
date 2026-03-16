@@ -45,6 +45,6 @@ struct ClockletApp: App {
     Window("Statistics", id: "statistics") {
       StatisticsView(viewModel: viewModel)
     }
-    .defaultSize(width: 600, height: 450)
+    .defaultSize(width: 620, height: 500)
   }
 }

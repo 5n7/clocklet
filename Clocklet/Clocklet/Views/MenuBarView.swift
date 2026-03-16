@@ -22,13 +22,38 @@ private struct ArrowCursorView: NSViewRepresentable {
   }
 }
 
+/// Menu-style row with hover highlight
+private struct MenuRow<Content: View>: View {
+  let action: () -> Void
+  @ViewBuilder let content: Content
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      content
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .background(
+      RoundedRectangle(cornerRadius: 4)
+        .fill(isHovering ? Color.accentColor.opacity(0.1) : Color.clear)
+    )
+    .padding(.horizontal, 4)
+    .onHover { hovering in
+      isHovering = hovering
+    }
+  }
+}
+
 struct MenuBarView: View {
   @Bindable var viewModel: ClockViewModel
   @Environment(\.openWindow) private var openWindow
   @Environment(\.openSettings) private var openSettings
 
   var body: some View {
-    // TimelineView ensures time-dependent properties update every second
     TimelineView(.periodic(from: .now, by: 1.0)) { _ in
       menuContent
     }
@@ -37,55 +62,27 @@ struct MenuBarView: View {
   private var menuContent: some View {
     VStack(alignment: .leading, spacing: 0) {
       // Clock In/Out Button
-      Button(action: { viewModel.toggle() }) {
-        HStack {
+      MenuRow(action: { viewModel.toggle() }) {
+        HStack(spacing: 8) {
           Image(systemName: viewModel.isTracking ? "stop.circle.fill" : "play.circle.fill")
             .foregroundColor(viewModel.isTracking ? .green : .secondary)
+            .font(.body)
           Text(viewModel.isTracking ? "Clock Out" : "Clock In")
+            .fontWeight(.medium)
           Spacer()
         }
       }
-      .buttonStyle(.plain)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
 
       Divider()
         .padding(.vertical, 4)
+        .padding(.horizontal, 8)
 
-      // Today's duration
-      HStack {
-        Text("Today:")
-          .foregroundColor(.secondary)
-        Spacer()
-        Text(DurationFormatter.format(viewModel.todayDuration))
-          .monospacedDigit()
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 4)
+      // Duration rows
+      durationRow(label: "Today:", duration: viewModel.todayDuration)
+      durationRow(label: "This Month:", duration: viewModel.thisMonthDuration)
+      durationRow(label: "Last Month:", duration: viewModel.lastMonthDuration)
 
-      // This month's duration
-      HStack {
-        Text("This Month:")
-          .foregroundColor(.secondary)
-        Spacer()
-        Text(DurationFormatter.format(viewModel.thisMonthDuration))
-          .monospacedDigit()
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 4)
-
-      // Last month's duration
-      HStack {
-        Text("Last Month:")
-          .foregroundColor(.secondary)
-        Spacer()
-        Text(DurationFormatter.format(viewModel.lastMonthDuration))
-          .monospacedDigit()
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 4)
-
-      // Current session info (if tracking)
+      // Current session info
       if viewModel.isTracking, let session = viewModel.data.currentSession {
         HStack {
           Text("Started:")
@@ -94,15 +91,17 @@ struct MenuBarView: View {
           Text(DateFormatters.timeOnly.string(from: session.clockIn))
             .monospacedDigit()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .font(.callout)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 3)
       }
 
       Divider()
         .padding(.vertical, 4)
+        .padding(.horizontal, 8)
 
-      // History
-      Button(action: {
+      // Navigation rows
+      MenuRow(action: {
         openWindow(id: "history")
         NSApp.activate(ignoringOtherApps: true)
       }) {
@@ -110,15 +109,12 @@ struct MenuBarView: View {
           Text("History")
           Spacer()
           Image(systemName: "chevron.right")
-            .foregroundColor(.secondary)
+            .font(.caption)
+            .foregroundColor(.secondary.opacity(0.6))
         }
       }
-      .buttonStyle(.plain)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
 
-      // Statistics
-      Button(action: {
+      MenuRow(action: {
         openWindow(id: "statistics")
         NSApp.activate(ignoringOtherApps: true)
       }) {
@@ -126,15 +122,12 @@ struct MenuBarView: View {
           Text("Statistics")
           Spacer()
           Image(systemName: "chevron.right")
-            .foregroundColor(.secondary)
+            .font(.caption)
+            .foregroundColor(.secondary.opacity(0.6))
         }
       }
-      .buttonStyle(.plain)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
 
-      // Settings
-      Button(action: {
+      MenuRow(action: {
         openSettings()
         NSApp.activate(ignoringOtherApps: true)
       }) {
@@ -142,26 +135,51 @@ struct MenuBarView: View {
           Text("Settings")
           Spacer()
           Image(systemName: "chevron.right")
-            .foregroundColor(.secondary)
+            .font(.caption)
+            .foregroundColor(.secondary.opacity(0.6))
         }
       }
-      .buttonStyle(.plain)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
 
       Divider()
         .padding(.vertical, 4)
+        .padding(.horizontal, 8)
 
-      // Quit
-      Button(action: { NSApplication.shared.terminate(nil) }) {
+      MenuRow(action: { NSApplication.shared.terminate(nil) }) {
         Text("Quit")
       }
-      .buttonStyle(.plain)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
     }
-    .frame(width: 200)
-    .padding(.vertical, 8)
+    .frame(width: 230)
+    .padding(.vertical, 6)
     .background(ArrowCursorView())
+  }
+
+  private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
+
+  private func durationRow(label: String, duration: TimeInterval) -> some View {
+    HStack(alignment: .top) {
+      Text(label)
+        .foregroundColor(.secondary)
+      Spacer()
+      VStack(alignment: .trailing, spacing: 2) {
+        Text(DurationFormatter.format(duration))
+          .monospacedDigit()
+        if showEarnings {
+          Text(
+            EarningsCalculator.format(
+              EarningsCalculator.calculate(
+                hourlyRate: SettingsManager.shared.hourlyRate,
+                durationSeconds: duration
+              )
+            )
+          )
+          .font(.caption)
+          .foregroundColor(.orange)
+          .monospacedDigit()
+        }
+      }
+    }
+    .font(.callout)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 3)
   }
 }

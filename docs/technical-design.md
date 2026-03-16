@@ -162,6 +162,8 @@ enum SettingsKey: String {
     case reminderEnabled                // Bool, default: true
     case reminderRepeatMinutes          // Int?, default: nil (off)
     case stopOnSleep                    // Bool, default: true
+    case hourlyRateEnabled              // Bool, default: false
+    case hourlyRate                     // Int, default: 0 (JPY per hour)
     // launchAtLogin handled by LaunchAtLogin package
     // shortcut handled by KeyboardShortcuts package
 }
@@ -745,6 +747,55 @@ final class SettingsManager {
 }
 ```
 
+## Hourly Rate / Earnings Feature
+
+### EarningsCalculator (Utility)
+
+```swift
+enum EarningsCalculator {
+    /// Calculate earnings based on Japanese labor law (minute-level precision)
+    /// Seconds are truncated to whole minutes before calculation
+    /// Formula: hourly_rate × (total_minutes / 60)
+    static func calculate(hourlyRate: Int, durationSeconds: TimeInterval) -> Int {
+        guard hourlyRate > 0, durationSeconds > 0 else { return 0 }
+        let totalMinutes = Int(durationSeconds) / 60
+        let earnings = Double(hourlyRate) * (Double(totalMinutes) / 60.0)
+        return Int(earnings)  // Floor (切り捨て)
+    }
+
+    /// Format earnings with yen symbol and comma separators (e.g., "¥ 5,250")
+    static func format(_ amount: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = ","
+        let formatted = formatter.string(from: NSNumber(value: amount)) ?? "\(amount)"
+        return "¥\u{2009}\(formatted)"  // thin space between ¥ and number
+    }
+}
+```
+
+### SettingsManager Additions
+
+```swift
+var hourlyRateEnabled: Bool {
+    get { defaults.object(forKey: SettingsKey.hourlyRateEnabled.rawValue) as? Bool ?? false }
+    set { defaults.set(newValue, forKey: SettingsKey.hourlyRateEnabled.rawValue) }
+}
+
+var hourlyRate: Int {
+    get { defaults.object(forKey: SettingsKey.hourlyRate.rawValue) as? Int ?? 0 }
+    set { defaults.set(newValue, forKey: SettingsKey.hourlyRate.rawValue) }
+}
+```
+
+### Display Integration
+
+Earnings are displayed alongside duration when `hourlyRateEnabled && hourlyRate > 0`:
+
+- **MenuBarView**: Shows earnings in parentheses after duration
+- **HistoryView**: Shows earnings per entry and per day total
+- **StatisticsView**: Shows monthly earnings alongside hours
+
 ## Key Flows
 
 ### Clock In Flow
@@ -841,5 +892,5 @@ xcodebuild -scheme Clocklet -configuration Release archive
 
 ---
 
-_Document Version: 1.3_
-_Last Updated: 2026-01-18_
+_Document Version: 1.4_
+_Last Updated: 2026-03-16_
