@@ -11,21 +11,7 @@ struct MonthlyStatistics: Identifiable {
   let month: Int
   let totalSeconds: Int
 
-  var totalDuration: TimeInterval {
-    TimeInterval(totalSeconds)
-  }
-
-  var totalHours: Double {
-    Double(totalSeconds) / 3600.0
-  }
-
-  private var date: Date? {
-    var components = DateComponents()
-    components.year = year
-    components.month = month
-    components.day = 1
-    return Calendar.current.date(from: components)
-  }
+  private let date: Date?
 
   var displayLabel: String {
     guard let date = date else {
@@ -50,5 +36,11 @@ struct MonthlyStatistics: Identifiable {
     self.year = year
     self.month = month
     self.totalSeconds = max(0, totalSeconds)
+
+    var components = DateComponents()
+    components.year = year
+    components.month = month
+    components.day = 1
+    self.date = Calendar.current.date(from: components)
   }
 }

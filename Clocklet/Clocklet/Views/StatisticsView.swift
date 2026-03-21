@@ -7,6 +7,7 @@ import Charts
 import SwiftUI
 
 enum StatisticsPeriod: String, CaseIterable {
+  case oneMonth = "1M"
   case threeMonths = "3M"
   case sixMonths = "6M"
   case twelveMonths = "12M"
@@ -14,11 +15,16 @@ enum StatisticsPeriod: String, CaseIterable {
 
   var monthCount: Int? {
     switch self {
+    case .oneMonth: return 1
     case .threeMonths: return 3
     case .sixMonths: return 6
     case .twelveMonths: return 12
     case .all: return nil
     }
+  }
+
+  var isDaily: Bool {
+    self == .oneMonth
   }
 }
 
@@ -27,19 +33,45 @@ enum StatisticsMetric: String, CaseIterable {
   case earnings = "Earnings"
 }
 
+/// Lightweight wrapper so daily and monthly stats can share chart/summary code.
+private struct ChartDataPoint: Identifiable {
+  let id: String
+  let label: String
+  let shortLabel: String
+  let totalSeconds: Int
+
+  var totalHours: Double { Double(totalSeconds) / 3600.0 }
+  var totalDuration: TimeInterval { TimeInterval(totalSeconds) }
+}
+
 @MainActor
 struct StatisticsView: View {
   @Bindable var viewModel: ClockViewModel
   @State private var selectedPeriod: StatisticsPeriod = .sixMonths
   @State private var selectedMetric: StatisticsMetric = .hours
-  @State private var hoveredStat: MonthlyStatistics?
+  @State private var hoveredPoint: ChartDataPoint?
 
-  private var statistics: [MonthlyStatistics] {
-    let allStats = viewModel.monthlyStatistics(months: 120)
-    guard let monthCount = selectedPeriod.monthCount else {
-      return allStats.filter { $0.totalSeconds > 0 || isRecentMonth($0) }
+  // MARK: - Data
+
+  private var chartData: [ChartDataPoint] {
+    if selectedPeriod.isDaily {
+      return viewModel.dailyStatistics().map {
+        ChartDataPoint(
+          id: $0.id, label: $0.displayLabel, shortLabel: $0.shortLabel,
+          totalSeconds: $0.totalSeconds)
+      }
     }
-    return Array(allStats.suffix(monthCount))
+    let allStats = viewModel.monthlyStatistics(months: 120)
+    let filtered: [MonthlyStatistics]
+    if let monthCount = selectedPeriod.monthCount {
+      filtered = Array(allStats.suffix(monthCount))
+    } else {
+      filtered = allStats.filter { $0.totalSeconds > 0 || isRecentMonth($0) }
+    }
+    return filtered.map {
+      ChartDataPoint(
+        id: $0.id, label: $0.displayLabel, shortLabel: $0.shortLabel, totalSeconds: $0.totalSeconds)
+    }
   }
 
   private func isRecentMonth(_ stat: MonthlyStatistics) -> Bool {
@@ -53,72 +85,68 @@ struct StatisticsView: View {
     return monthsDiff <= 2
   }
 
-  // MARK: - Hours metrics
-
-  private var totalHours: Double {
-    statistics.reduce(0) { $0 + $1.totalHours }
-  }
-
-  private var averageHoursPerMonth: Double {
-    let nonZeroMonths = statistics.filter { $0.totalSeconds > 0 }
-    guard !nonZeroMonths.isEmpty else { return 0 }
-    return nonZeroMonths.reduce(0) { $0 + $1.totalHours } / Double(nonZeroMonths.count)
-  }
-
-  private var peakMonth: MonthlyStatistics? {
-    statistics.max { $0.totalSeconds < $1.totalSeconds }
-  }
-
-  // MARK: - Earnings metrics
+  // MARK: - Metrics helpers
 
   private var hourlyRate: Int { SettingsManager.shared.hourlyRate }
-
-  private func earnings(for stat: MonthlyStatistics) -> Int {
-    EarningsCalculator.calculate(hourlyRate: hourlyRate, durationSeconds: stat.totalDuration)
-  }
-
-  private var totalEarnings: Int {
-    statistics.reduce(0) { $0 + earnings(for: $1) }
-  }
-
-  private var averageEarningsPerMonth: Int {
-    let nonZeroMonths = statistics.filter { $0.totalSeconds > 0 }
-    guard !nonZeroMonths.isEmpty else { return 0 }
-    return nonZeroMonths.reduce(0) { $0 + earnings(for: $1) } / nonZeroMonths.count
-  }
-
   private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
+
+  private func earnings(for duration: TimeInterval) -> Int {
+    EarningsCalculator.calculate(hourlyRate: hourlyRate, durationSeconds: duration)
+  }
+
+  private func totalHours(_ data: [ChartDataPoint]) -> Double {
+    data.reduce(0) { $0 + $1.totalHours }
+  }
+
+  private func averageHours(_ data: [ChartDataPoint]) -> Double {
+    let nonZero = data.filter { $0.totalSeconds > 0 }
+    guard !nonZero.isEmpty else { return 0 }
+    return nonZero.reduce(0) { $0 + $1.totalHours } / Double(nonZero.count)
+  }
+
+  private func peak(_ data: [ChartDataPoint]) -> ChartDataPoint? {
+    data.max { $0.totalSeconds < $1.totalSeconds }
+  }
+
+  private func totalEarnings(_ data: [ChartDataPoint]) -> Int {
+    data.reduce(0) { $0 + earnings(for: $1.totalDuration) }
+  }
+
+  private func averageEarnings(_ data: [ChartDataPoint]) -> Int {
+    let nonZero = data.filter { $0.totalSeconds > 0 }
+    guard !nonZero.isEmpty else { return 0 }
+    return nonZero.reduce(0) { $0 + earnings(for: $1.totalDuration) } / nonZero.count
+  }
 
   // MARK: - Body
 
   var body: some View {
+    let data = chartData
+    let hasData = !data.isEmpty && !data.allSatisfy({ $0.totalSeconds == 0 })
+
     VStack(spacing: 0) {
-      // Selectors
       HStack(spacing: 16) {
         periodSelector
-
-        if showEarnings {
-          metricSelector
-        }
+        if showEarnings { metricSelector }
       }
       .padding(.horizontal, 20)
       .padding(.vertical, 14)
 
       Divider()
 
-      if statistics.isEmpty || statistics.allSatisfy({ $0.totalSeconds == 0 }) {
+      if !hasData {
         emptyState
       } else {
         ScrollView {
           VStack(spacing: 24) {
-            chartView
+            chartSection(data: data)
               .padding(.horizontal, 20)
               .padding(.top, 16)
 
             Divider()
               .padding(.horizontal, 20)
 
-            summaryView
+            summarySection(data: data)
               .padding(.horizontal, 20)
               .padding(.bottom, 20)
           }
@@ -137,7 +165,7 @@ struct StatisticsView: View {
       }
     }
     .pickerStyle(.segmented)
-    .frame(maxWidth: 260)
+    .frame(maxWidth: 320)
   }
 
   private var metricSelector: some View {
@@ -168,39 +196,58 @@ struct StatisticsView: View {
 
   // MARK: - Chart
 
-  private var chartView: some View {
-    VStack(spacing: 8) {
+  private func chartSection(data: [ChartDataPoint]) -> some View {
+    let isEarnings = selectedMetric == .earnings && showEarnings
+    let tint: Color = isEarnings ? .orange : .accentColor
+    let axisLabel = selectedPeriod.isDaily ? "Day" : "Month"
+
+    return VStack(spacing: 8) {
       // Tooltip
       Group {
-        if let stat = hoveredStat {
-          tooltipContent(for: stat)
+        if let point = hoveredPoint {
+          tooltipContent(label: point.label, duration: point.totalDuration)
         } else {
-          Text(" ")
-            .font(.callout)
+          Text(" ").font(.callout)
         }
       }
       .frame(height: 22)
-      .animation(.none, value: hoveredStat?.id)
+      .animation(.none, value: hoveredPoint?.id)
 
-      if selectedMetric == .earnings && showEarnings {
-        earningsChart
-      } else {
-        hoursChart
+      Chart(data) { point in
+        let yValue = isEarnings ? Double(earnings(for: point.totalDuration)) : point.totalHours
+        BarMark(
+          x: .value(axisLabel, point.shortLabel),
+          y: .value(isEarnings ? "Earnings" : "Hours", yValue)
+        )
+        .foregroundStyle(
+          hoveredPoint?.id == point.id ? tint : tint.opacity(0.7)
+        )
+        .cornerRadius(4)
       }
+      .chartYAxisLabel(isEarnings ? "Earnings" : "Hours")
+      .chartXAxis {
+        AxisMarks(values: .automatic) { _ in
+          AxisValueLabel()
+        }
+      }
+      .chartOverlay { proxy in
+        hoverOverlay(proxy: proxy, data: data)
+      }
+      .frame(height: 220)
     }
   }
 
-  private func tooltipContent(for stat: MonthlyStatistics) -> some View {
+  private func tooltipContent(label: String, duration: TimeInterval) -> some View {
     HStack(spacing: 8) {
-      Text(stat.displayLabel)
+      Text(label)
         .fontWeight(.medium)
       if selectedMetric == .hours || !showEarnings {
-        Text(DurationFormatter.format(stat.totalDuration))
+        Text(DurationFormatter.format(duration))
           .monospacedDigit()
           .foregroundColor(.secondary)
       }
       if selectedMetric == .earnings && showEarnings {
-        Text(EarningsCalculator.format(earnings(for: stat)))
+        Text(EarningsCalculator.format(earnings(for: duration)))
           .monospacedDigit()
           .foregroundColor(.orange)
       }
@@ -208,57 +255,7 @@ struct StatisticsView: View {
     .font(.callout)
   }
 
-  private var hoursChart: some View {
-    Chart(statistics) { stat in
-      BarMark(
-        x: .value("Month", stat.shortLabel),
-        y: .value("Hours", stat.totalHours)
-      )
-      .foregroundStyle(
-        hoveredStat?.id == stat.id
-          ? Color.accentColor
-          : Color.accentColor.opacity(0.7)
-      )
-      .cornerRadius(4)
-    }
-    .chartYAxisLabel("Hours")
-    .chartXAxis {
-      AxisMarks(values: .automatic) { _ in
-        AxisValueLabel()
-      }
-    }
-    .chartOverlay { proxy in
-      hoverOverlay(proxy: proxy)
-    }
-    .frame(height: 220)
-  }
-
-  private var earningsChart: some View {
-    Chart(statistics) { stat in
-      BarMark(
-        x: .value("Month", stat.shortLabel),
-        y: .value("Earnings", earnings(for: stat))
-      )
-      .foregroundStyle(
-        hoveredStat?.id == stat.id
-          ? Color.orange
-          : Color.orange.opacity(0.7)
-      )
-      .cornerRadius(4)
-    }
-    .chartYAxisLabel("Earnings")
-    .chartXAxis {
-      AxisMarks(values: .automatic) { _ in
-        AxisValueLabel()
-      }
-    }
-    .chartOverlay { proxy in
-      hoverOverlay(proxy: proxy)
-    }
-    .frame(height: 220)
-  }
-
-  private func hoverOverlay(proxy: ChartProxy) -> some View {
+  private func hoverOverlay(proxy: ChartProxy, data: [ChartDataPoint]) -> some View {
     GeometryReader { geometry in
       Rectangle()
         .fill(.clear)
@@ -266,23 +263,21 @@ struct StatisticsView: View {
         .onContinuousHover { phase in
           switch phase {
           case .active(let location):
-            guard let plotFrame = proxy.plotFrame,
-              !statistics.isEmpty
-            else {
-              hoveredStat = nil
+            guard let plotFrame = proxy.plotFrame, !data.isEmpty else {
+              hoveredPoint = nil
               return
             }
             let plotArea = geometry[plotFrame]
             let relativeX = location.x - plotArea.origin.x
-            let barWidth = plotArea.width / CGFloat(statistics.count)
+            let barWidth = plotArea.width / CGFloat(data.count)
             let index = Int(relativeX / barWidth)
-            if index >= 0, index < statistics.count {
-              hoveredStat = statistics[index]
+            if index >= 0, index < data.count {
+              hoveredPoint = data[index]
             } else {
-              hoveredStat = nil
+              hoveredPoint = nil
             }
           case .ended:
-            hoveredStat = nil
+            hoveredPoint = nil
           }
         }
     }
@@ -290,38 +285,39 @@ struct StatisticsView: View {
 
   // MARK: - Summary
 
-  private var summaryView: some View {
+  private func summarySection(data: [ChartDataPoint]) -> some View {
     HStack(spacing: 0) {
       if selectedMetric == .earnings && showEarnings {
-        earningsSummary
+        earningsSummary(data: data)
       } else {
-        hoursSummary
+        hoursSummary(data: data)
       }
     }
     .frame(maxWidth: .infinity)
   }
 
-  private var hoursSummary: some View {
-    HStack(spacing: 0) {
+  private func hoursSummary(data: [ChartDataPoint]) -> some View {
+    let periodSuffix = selectedPeriod.isDaily ? "day" : "mo"
+    return HStack(spacing: 0) {
       summaryItem(
         title: "Total",
-        value: String(format: "%.1f h", totalHours),
+        value: String(format: "%.1f h", totalHours(data)),
         icon: "clock.fill"
       )
       .frame(maxWidth: .infinity)
 
       summaryItem(
         title: "Average",
-        value: String(format: "%.1f h/mo", averageHoursPerMonth),
+        value: String(format: "%.1f h/\(periodSuffix)", averageHours(data)),
         icon: "chart.line.uptrend.xyaxis"
       )
       .frame(maxWidth: .infinity)
 
-      if let peak = peakMonth, peak.totalSeconds > 0 {
+      if let p = peak(data), p.totalSeconds > 0 {
         summaryItem(
           title: "Peak",
-          value: String(format: "%.1f h", peak.totalHours),
-          subtitle: peak.displayLabel,
+          value: String(format: "%.1f h", p.totalHours),
+          subtitle: p.label,
           icon: "star.fill"
         )
         .frame(maxWidth: .infinity)
@@ -329,11 +325,12 @@ struct StatisticsView: View {
     }
   }
 
-  private var earningsSummary: some View {
-    HStack(spacing: 0) {
+  private func earningsSummary(data: [ChartDataPoint]) -> some View {
+    let periodSuffix = selectedPeriod.isDaily ? "day" : "mo"
+    return HStack(spacing: 0) {
       summaryItem(
         title: "Total",
-        value: EarningsCalculator.format(totalEarnings),
+        value: EarningsCalculator.format(totalEarnings(data)),
         icon: "banknote.fill",
         tint: .orange
       )
@@ -341,17 +338,17 @@ struct StatisticsView: View {
 
       summaryItem(
         title: "Average",
-        value: "\(EarningsCalculator.format(averageEarningsPerMonth))/mo",
+        value: "\(EarningsCalculator.format(averageEarnings(data)))/\(periodSuffix)",
         icon: "chart.line.uptrend.xyaxis",
         tint: .orange
       )
       .frame(maxWidth: .infinity)
 
-      if let peak = peakMonth, peak.totalSeconds > 0 {
+      if let p = peak(data), p.totalSeconds > 0 {
         summaryItem(
           title: "Peak",
-          value: EarningsCalculator.format(earnings(for: peak)),
-          subtitle: peak.displayLabel,
+          value: EarningsCalculator.format(earnings(for: p.totalDuration)),
+          subtitle: p.label,
           icon: "star.fill",
           tint: .orange
         )
