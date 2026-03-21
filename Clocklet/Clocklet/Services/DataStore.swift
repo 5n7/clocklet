@@ -28,6 +28,11 @@ final class DataStore {
   private let encoder: JSONEncoder
   private let decoder: JSONDecoder
 
+  /// Returns the path to the data file (for debugging)
+  var dataFilePath: String {
+    fileURL.path
+  }
+
   init() {
     guard
       let appSupport = FileManager.default.urls(
@@ -72,10 +77,5 @@ final class DataStore {
     } catch {
       throw DataStoreError.writeFailed(error)
     }
-  }
-
-  /// Returns the path to the data file (for debugging)
-  var dataFilePath: String {
-    fileURL.path
   }
 }

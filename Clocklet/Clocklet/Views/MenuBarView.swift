@@ -53,6 +53,8 @@ struct MenuBarView: View {
   @Environment(\.openWindow) private var openWindow
   @Environment(\.openSettings) private var openSettings
 
+  private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
+
   var body: some View {
     TimelineView(.periodic(from: .now, by: 1.0)) { _ in
       menuContent
@@ -152,8 +154,6 @@ struct MenuBarView: View {
     .padding(.vertical, 6)
     .background(ArrowCursorView())
   }
-
-  private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
 
   private func durationRow(label: String, duration: TimeInterval) -> some View {
     HStack(alignment: .top) {

@@ -13,6 +13,19 @@ struct MonthlyStatistics: Identifiable {
 
   private let date: Date?
 
+  init(year: Int, month: Int, totalSeconds: Int) {
+    self.id = Self.makeKey(year: year, month: month)
+    self.year = year
+    self.month = month
+    self.totalSeconds = max(0, totalSeconds)
+
+    var components = DateComponents()
+    components.year = year
+    components.month = month
+    components.day = 1
+    self.date = Calendar.current.date(from: components)
+  }
+
   var displayLabel: String {
     guard let date = date else {
       return "\(month)/\(year)"
@@ -29,18 +42,5 @@ struct MonthlyStatistics: Identifiable {
 
   static func makeKey(year: Int, month: Int) -> String {
     "\(year)-\(String(format: "%02d", month))"
-  }
-
-  init(year: Int, month: Int, totalSeconds: Int) {
-    self.id = Self.makeKey(year: year, month: month)
-    self.year = year
-    self.month = month
-    self.totalSeconds = max(0, totalSeconds)
-
-    var components = DateComponents()
-    components.year = year
-    components.month = month
-    components.day = 1
-    self.date = Calendar.current.date(from: components)
   }
 }

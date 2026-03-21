@@ -51,8 +51,6 @@ struct StatisticsView: View {
   @State private var selectedMetric: StatisticsMetric = .hours
   @State private var hoveredPoint: ChartDataPoint?
 
-  // MARK: - Data
-
   private var chartData: [ChartDataPoint] {
     if selectedPeriod.isDaily {
       return viewModel.dailyStatistics().map {
@@ -85,8 +83,6 @@ struct StatisticsView: View {
     return monthsDiff <= 2
   }
 
-  // MARK: - Metrics helpers
-
   private var hourlyRate: Int { SettingsManager.shared.hourlyRate }
   private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
 
@@ -117,8 +113,6 @@ struct StatisticsView: View {
     guard !nonZero.isEmpty else { return 0 }
     return nonZero.reduce(0) { $0 + earnings(for: $1.totalDuration) } / nonZero.count
   }
-
-  // MARK: - Body
 
   var body: some View {
     let data = chartData
@@ -156,8 +150,6 @@ struct StatisticsView: View {
     .frame(minWidth: 560, idealWidth: 600, minHeight: 460, idealHeight: 500)
   }
 
-  // MARK: - Selectors
-
   private var periodSelector: some View {
     Picker("Period", selection: $selectedPeriod) {
       ForEach(StatisticsPeriod.allCases, id: \.self) { period in
@@ -178,8 +170,6 @@ struct StatisticsView: View {
     .frame(maxWidth: 180)
   }
 
-  // MARK: - Empty state
-
   private var emptyState: some View {
     VStack(spacing: 12) {
       Image(systemName: "chart.bar")
@@ -193,8 +183,6 @@ struct StatisticsView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
-
-  // MARK: - Chart
 
   private func chartSection(data: [ChartDataPoint]) -> some View {
     let isEarnings = selectedMetric == .earnings && showEarnings
@@ -282,8 +270,6 @@ struct StatisticsView: View {
         }
     }
   }
-
-  // MARK: - Summary
 
   private func summarySection(data: [ChartDataPoint]) -> some View {
     HStack(spacing: 0) {

@@ -22,6 +22,19 @@ final class ClockViewModel {
   private(set) var data: ClockletData = ClockletData()
   private(set) var lastError: Error?
 
+  private init(
+    dataStore: DataStore,
+    notificationManager: NotificationManager
+  ) {
+    self.dataStore = dataStore
+    self.notificationManager = notificationManager
+    self.reminderScheduler = ReminderScheduler(notificationManager: notificationManager)
+
+    loadData()
+    setupSleepWatcher()
+    checkIncompleteSession()
+  }
+
   var isTracking: Bool {
     data.currentSession != nil
   }
@@ -73,6 +86,18 @@ final class ClockViewModel {
     return data.entries
       .filter { calendar.isDate($0.clockIn, equalTo: lastMonth, toGranularity: .month) }
       .reduce(0) { $0 + TimeInterval($1.durationSeconds) }
+  }
+
+  /// Entries grouped by date for history view
+  var entriesByDate: [(date: String, entries: [TimeEntry])] {
+    Dictionary(grouping: data.entries, by: { $0.date })
+      .sorted { $0.key > $1.key }
+      .map { (date: $0.key, entries: $0.value.sorted { $0.clockIn > $1.clockIn }) }
+  }
+
+  /// Check if there's an incomplete session from crash
+  var hasIncompleteSession: Bool {
+    data.currentSession != nil
   }
 
   /// Get monthly statistics for the specified number of months
@@ -169,58 +194,6 @@ final class ClockViewModel {
     return statistics
   }
 
-  /// Entries grouped by date for history view
-  var entriesByDate: [(date: String, entries: [TimeEntry])] {
-    Dictionary(grouping: data.entries, by: { $0.date })
-      .sorted { $0.key > $1.key }
-      .map { (date: $0.key, entries: $0.value.sorted { $0.clockIn > $1.clockIn }) }
-  }
-
-  /// Check if there's an incomplete session from crash
-  var hasIncompleteSession: Bool {
-    data.currentSession != nil
-  }
-
-  private init(
-    dataStore: DataStore,
-    notificationManager: NotificationManager
-  ) {
-    self.dataStore = dataStore
-    self.notificationManager = notificationManager
-    self.reminderScheduler = ReminderScheduler(notificationManager: notificationManager)
-
-    loadData()
-    setupSleepWatcher()
-    checkIncompleteSession()
-  }
-
-  private func setupSleepWatcher() {
-    sleepWatcher = SleepWatcher(
-      shouldStopOnSleep: { SettingsManager.shared.stopOnSleep },
-      onSleep: { [weak self] in
-        Task { @MainActor in
-          self?.clockOut()
-        }
-      }
-    )
-  }
-
-  private func loadData() {
-    do {
-      data = try dataStore.load()
-    } catch {
-      lastError = error
-      data = ClockletData()
-    }
-  }
-
-  private func checkIncompleteSession() {
-    guard data.currentSession != nil else { return }
-    Task { @MainActor in
-      await notificationManager.showIncompleteSessionNotification()
-    }
-  }
-
   func toggle() {
     if isTracking {
       clockOut()
@@ -266,6 +239,16 @@ final class ClockViewModel {
     }
   }
 
+  func addEntry(clockIn: Date, clockOut: Date) {
+    do {
+      let entry = try TimeEntry(clockIn: clockIn, clockOut: clockOut)
+      data.entries.append(entry)
+      save()
+    } catch {
+      lastError = error
+    }
+  }
+
   func updateEntry(_ entry: TimeEntry, clockIn: Date, clockOut: Date) {
     guard let index = data.entries.firstIndex(where: { $0.id == entry.id }) else { return }
 
@@ -290,16 +273,6 @@ final class ClockViewModel {
     save()
   }
 
-  func addEntry(clockIn: Date, clockOut: Date) {
-    do {
-      let entry = try TimeEntry(clockIn: clockIn, clockOut: clockOut)
-      data.entries.append(entry)
-      save()
-    } catch {
-      lastError = error
-    }
-  }
-
   /// Complete an incomplete session (crash recovery)
   func completeIncompleteSession(clockOut: Date) {
     guard let session = data.currentSession else { return }
@@ -318,6 +291,33 @@ final class ClockViewModel {
   func discardIncompleteSession() {
     data.currentSession = nil
     save()
+  }
+
+  private func setupSleepWatcher() {
+    sleepWatcher = SleepWatcher(
+      shouldStopOnSleep: { SettingsManager.shared.stopOnSleep },
+      onSleep: { [weak self] in
+        Task { @MainActor in
+          self?.clockOut()
+        }
+      }
+    )
+  }
+
+  private func loadData() {
+    do {
+      data = try dataStore.load()
+    } catch {
+      lastError = error
+      data = ClockletData()
+    }
+  }
+
+  private func checkIncompleteSession() {
+    guard data.currentSession != nil else { return }
+    Task { @MainActor in
+      await notificationManager.showIncompleteSessionNotification()
+    }
   }
 
   private func save() {

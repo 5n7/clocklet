@@ -12,6 +12,14 @@ struct HistoryView: View {
   @State private var selectedEntries: Set<TimeEntry.ID> = []
   @State private var showDeleteConfirmation = false
 
+  private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
+
+  private static let dateHeaderFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy/MM/dd (E)"
+    return formatter
+  }()
+
   var body: some View {
     NavigationStack {
       Group {
@@ -132,8 +140,6 @@ struct HistoryView: View {
     .frame(minWidth: 400, minHeight: 300)
   }
 
-  private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
-
   private func toggleSelection(_ id: TimeEntry.ID) {
     if selectedEntries.contains(id) {
       selectedEntries.remove(id)
@@ -168,12 +174,6 @@ struct HistoryView: View {
       }
     }
   }
-
-  private static let dateHeaderFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyy/MM/dd (E)"
-    return formatter
-  }()
 
   private func formatDateHeader(_ dateString: String) -> String {
     guard let date = DateFormatters.dateOnly.date(from: dateString) else {
