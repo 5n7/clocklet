@@ -116,8 +116,9 @@ Clocklet is a time-tracking application that resides in the Mac status bar. It e
 | Item            | Details                                                         |
 | --------------- | --------------------------------------------------------------- |
 | Daily Summary   | Displays total work hours for the day                           |
-| Monthly Summary | Displays total work hours for the current month                 |
+| Monthly Summary | Displays total work hours for the current and last month        |
 | History View    | Lists past logs in reverse chronological order, grouped by date |
+| Statistics View | Charts and summaries of work hours/earnings over time           |
 | Access Point    | Accessible from status bar menu                                 |
 
 #### Display Example
@@ -125,8 +126,10 @@ Clocklet is a time-tracking application that resides in the Mac status bar. It e
 ```
 Today: 3h 30m
 This Month: 42h 15m
+Last Month: 38h 00m
 ---
-View History →
+History →
+Statistics →
 ```
 
 ### 6. Reminder Feature
@@ -140,6 +143,17 @@ View History →
 | Notification Content | "Did you forget to Clock Out?"                                                                                   |
 | Repeat               | Configurable (off / 15 / 30 / 60 minutes interval)                                                               |
 | Repeat Behavior      | Timer resets after each notification (e.g., 60min threshold + 15min repeat = notify at 60min, 75min, 90min, ...) |
+
+### 6b. Clock Event Notification Feature
+
+| Item                | Details                                       |
+| ------------------- | --------------------------------------------- |
+| Trigger             | On Clock In or Clock Out                      |
+| Default             | Enabled                                       |
+| Configurable        | Toggle in Settings ("Notify on Clock In/Out") |
+| Clock In Message    | "Clocked in at HH:mm"                         |
+| Clock Out Message   | "Clocked out. Duration: Xh Ym"                |
+| Notification Method | macOS standard notification                   |
 
 ### 7. Data Editing Feature
 
@@ -174,7 +188,28 @@ View History →
 | Delete   | Trigger delete dialog |
 | Escape   | Clear all selections  |
 
-### 8. Hourly Rate Feature
+### 8. Statistics Feature
+
+| Item             | Details                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| Access Point     | Accessible from status bar menu ("Statistics" button)                    |
+| Period Selection | Segmented picker: 1M, 3M, 6M, 12M, All                                   |
+| 1M View          | Daily bar chart for the current month (up to today)                      |
+| 3M/6M/12M View   | Monthly bar chart for the selected number of past months                 |
+| All View         | Monthly bar chart showing all months with data (plus recent zero months) |
+| Metric Switching | Hours / Earnings toggle (only visible when hourly rate enabled)          |
+| Chart            | Bar chart with hover tooltip showing date and value                      |
+| Summary Cards    | Total, Average (per day or per month), Peak (with date label)            |
+| Empty State      | "No Data" message with guidance to start tracking                        |
+
+#### Chart Display
+
+- **Hours mode**: Y-axis shows hours, accent color bars
+- **Earnings mode**: Y-axis shows earnings (¥), orange bars
+- **Hover tooltip**: Shows date label with hours or earnings value
+- **Summary**: Total, Average (excluding zero-data periods), Peak
+
+### 9. Hourly Rate Feature
 
 | Item           | Details                                                                                        |
 | -------------- | ---------------------------------------------------------------------------------------------- |
@@ -194,29 +229,30 @@ Japanese labor law requires wage calculation at minute-level granularity:
 
 #### Display Locations
 
-| Location              | Display Format                                         |
-| --------------------- | ------------------------------------------------------ |
-| Menu Bar (Today)      | "Today: 3h 30m" with "¥ 5,250" below                   |
-| Menu Bar (This Month) | "This Month: 42h 15m" with "¥ 63,375" below            |
-| Menu Bar (Last Month) | "Last Month: 38h 00m" with "¥ 57,000" below            |
-| History (per entry)   | "09:00 - 12:30 3h 30m" with "¥ 5,250" below            |
-| History (daily total) | Date header shows daily total earnings                 |
-| Statistics            | Tab switcher (Hours / Earnings) with chart and summary |
+| Location              | Display Format                                                      |
+| --------------------- | ------------------------------------------------------------------- |
+| Menu Bar (Today)      | "Today: 3h 30m" with "¥ 5,250" below                                |
+| Menu Bar (This Month) | "This Month: 42h 15m" with "¥ 63,375" below                         |
+| Menu Bar (Last Month) | "Last Month: 38h 00m" with "¥ 57,000" below                         |
+| History (per entry)   | "09:00 - 12:30 3h 30m" with "¥ 5,250" below                         |
+| History (daily total) | Date header shows daily total earnings                              |
+| Statistics            | Metric switcher (Hours / Earnings) with bar chart and summary cards |
 
 **Note:** Earnings are only shown when the hourly rate feature is enabled and rate > 0.
 
-### 9. Settings Feature
+### 10. Settings Feature
 
-| Setting Item             | Details                                    | Default Value |
-| ------------------------ | ------------------------------------------ | ------------- |
-| Shortcut Key             | Global hotkey configuration                | Not set       |
-| Reminder Threshold       | Time until Clock Out reminder              | 60 minutes    |
-| Reminder Enable/Disable  | Toggle reminder feature                    | Enabled       |
-| Reminder Repeat Interval | Interval for repeated reminders            | Off           |
-| Launch at Login          | Auto-start on Mac boot                     | Disabled      |
-| Stop on Sleep            | Automatically clock out when system sleeps | Enabled       |
-| Hourly Rate Enable       | Toggle earnings display                    | Disabled      |
-| Hourly Rate              | Rate in JPY per hour                       | 0             |
+| Setting Item              | Details                                    | Default Value |
+| ------------------------- | ------------------------------------------ | ------------- |
+| Shortcut Key              | Global hotkey configuration                | Not set       |
+| Reminder Threshold        | Time until Clock Out reminder              | 60 minutes    |
+| Reminder Enable/Disable   | Toggle reminder feature                    | Enabled       |
+| Reminder Repeat Interval  | Interval for repeated reminders            | Off           |
+| Clock Event Notifications | Notify on Clock In/Out                     | Enabled       |
+| Launch at Login           | Auto-start on Mac boot                     | Disabled      |
+| Stop on Sleep             | Automatically clock out when system sleeps | Enabled       |
+| Hourly Rate Enable        | Toggle earnings display                    | Disabled      |
+| Hourly Rate               | Rate in JPY per hour                       | 0             |
 
 ## System Behavior
 
@@ -299,9 +335,12 @@ Japanese labor law requires wage calculation at minute-level granularity:
 │                  ¥ 3,750   │     when hourly rate enabled
 │ This Month:    38h 45m     │
 │                 ¥ 58,125   │
+│ Last Month:    38h 00m     │
+│                 ¥ 57,000   │
 │ Started: 14:00             │  ← Shows current session start time
 ├─────────────────────────────┤
 │ History                  → │
+│ Statistics               → │
 │ Settings                 → │
 ├─────────────────────────────┤
 │ Quit                       │
@@ -316,8 +355,11 @@ Japanese labor law requires wage calculation at minute-level granularity:
 │                  ¥ 3,750   │
 │ This Month:    38h 45m     │
 │                 ¥ 58,125   │
+│ Last Month:    38h 00m     │
+│                 ¥ 57,000   │
 ├─────────────────────────────┤
 │ History                  → │
+│ Statistics               → │
 │ Settings                 → │
 ├─────────────────────────────┤
 │ Quit                       │
@@ -360,5 +402,5 @@ The following are out of scope for the initial version but may be considered in 
 
 ---
 
-_Document Version: 1.5_
-_Last Updated: 2026-03-16_
+_Document Version: 1.6_
+_Last Updated: 2026-03-24_

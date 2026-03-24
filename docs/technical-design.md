@@ -38,7 +38,9 @@ Clocklet/
 │   ├── Models/
 │   │   ├── TimeEntry.swift            # Single work session
 │   │   ├── ClockletData.swift         # All entries + current session
-│   │   └── CurrentSession.swift       # In-progress tracking
+│   │   ├── CurrentSession.swift       # In-progress tracking
+│   │   ├── DailyStatistics.swift      # Daily aggregation for charts
+│   │   └── MonthlyStatistics.swift    # Monthly aggregation for charts
 │   │
 │   ├── ViewModels/
 │   │   └── ClockViewModel.swift       # Main clock state, clock in/out logic, history
@@ -47,6 +49,7 @@ Clocklet/
 │   │   ├── MenuBarView.swift          # Status bar menu content
 │   │   ├── HistoryView.swift          # Past entries list (includes HistoryRowView)
 │   │   ├── EditEntryView.swift        # Add/edit entry sheet
+│   │   ├── StatisticsView.swift       # Charts and summaries
 │   │   └── SettingsView.swift         # Preferences window
 │   │
 │   ├── Services/
@@ -58,7 +61,8 @@ Clocklet/
 │   │
 │   ├── Utilities/
 │   │   ├── DateFormatters.swift       # ISO8601, display formatters
-│   │   └── DurationFormatter.swift    # "2h 30m" formatting
+│   │   ├── DurationFormatter.swift    # "2h 30m" formatting
+│   │   └── EarningsCalculator.swift   # Hourly rate calculation + formatting
 │   │
 │   └── Resources/
 │       ├── Assets.xcassets/
@@ -154,16 +158,50 @@ enum TimeEntryError: LocalizedError {
 
 **Design note:** `date` and `durationSeconds` are computed properties to prevent data inconsistency when entries are edited.
 
+### DailyStatistics
+
+```swift
+struct DailyStatistics: Identifiable {
+    let id: String          // "yyyy-MM-dd" key
+    let year: Int
+    let month: Int
+    let day: Int
+    let totalSeconds: Int   // Clamped to 0 minimum
+
+    var displayLabel: String    // e.g., "1/18" (M/d format)
+    var shortLabel: String      // Day number as string
+
+    static func makeKey(year: Int, month: Int, day: Int) -> String
+}
+```
+
+### MonthlyStatistics
+
+```swift
+struct MonthlyStatistics: Identifiable {
+    let id: String          // "yyyy-MM" key
+    let year: Int
+    let month: Int
+    let totalSeconds: Int   // Clamped to 0 minimum
+
+    var displayLabel: String    // e.g., "Jan 2026" (MMM yyyy format)
+    var shortLabel: String      // e.g., "Jan" (MMM format)
+
+    static func makeKey(year: Int, month: Int) -> String
+}
+```
+
 ### Settings (UserDefaults)
 
 ```swift
 enum SettingsKey: String {
-    case reminderThresholdMinutes       // Int, default: 60
-    case reminderEnabled                // Bool, default: true
-    case reminderRepeatMinutes          // Int?, default: nil (off)
-    case stopOnSleep                    // Bool, default: true
-    case hourlyRateEnabled              // Bool, default: false
-    case hourlyRate                     // Int, default: 0 (JPY per hour)
+    case reminderEnabled                    // Bool, default: true
+    case reminderThresholdMinutes           // Int, default: 60
+    case reminderRepeatMinutes              // Int?, default: nil (off)
+    case clockEventNotificationEnabled      // Bool, default: true
+    case stopOnSleep                        // Bool, default: true
+    case hourlyRateEnabled                  // Bool, default: false
+    case hourlyRate                         // Int, default: 0 (JPY per hour)
     // launchAtLogin handled by LaunchAtLogin package
     // shortcut handled by KeyboardShortcuts package
 }
@@ -207,6 +245,11 @@ struct ClockletApp: App {
             HistoryView(viewModel: viewModel)
         }
         .defaultSize(width: 500, height: 400)
+
+        Window("Statistics", id: "statistics") {
+            StatisticsView(viewModel: viewModel)
+        }
+        .defaultSize(width: 620, height: 500)
     }
 }
 ```
@@ -279,12 +322,33 @@ final class ClockViewModel {
         return completedDuration
     }
 
+    var lastMonthDuration: TimeInterval {
+        let calendar = Calendar.current
+        guard let lastMonth = calendar.date(byAdding: .month, value: -1, to: Date()) else {
+            return 0
+        }
+        return data.entries
+            .filter { calendar.isDate($0.clockIn, equalTo: lastMonth, toGranularity: .month) }
+            .reduce(0) { $0 + TimeInterval($1.durationSeconds) }
+    }
+
     /// Entries grouped by date for history view
     var entriesByDate: [(date: String, entries: [TimeEntry])] {
         Dictionary(grouping: data.entries, by: { $0.date })
             .sorted { $0.key > $1.key }
             .map { (date: $0.key, entries: $0.value.sorted { $0.clockIn > $1.clockIn }) }
     }
+
+    /// Check if there's an incomplete session from crash
+    var hasIncompleteSession: Bool {
+        data.currentSession != nil
+    }
+
+    /// Get monthly statistics for the specified number of months
+    func monthlyStatistics(months: Int = 12) -> [MonthlyStatistics] { ... }
+
+    /// Get daily statistics for the current month
+    func dailyStatistics() -> [DailyStatistics] { ... }
 
     private init(
         dataStore: DataStore,
@@ -341,6 +405,12 @@ final class ClockViewModel {
         data.currentSession = CurrentSession(clockIn: Date())
         save()
         reminderScheduler.start()
+
+        if SettingsManager.shared.clockEventNotificationEnabled {
+            Task {
+                await notificationManager.sendClockInNotification()
+            }
+        }
     }
 
     func clockOut() {
@@ -352,6 +422,12 @@ final class ClockViewModel {
             data.currentSession = nil
             save()
             reminderScheduler.stop()
+
+            if SettingsManager.shared.clockEventNotificationEnabled {
+                Task {
+                    await notificationManager.sendClockOutNotification(durationSeconds: entry.durationSeconds)
+                }
+            }
         } catch {
             lastError = error
         }
@@ -503,6 +579,64 @@ List with checkboxes always visible
 
 **State Reset:** Selections are view-local `@State` and automatically reset when the window closes.
 
+### StatisticsView
+
+The StatisticsView displays charts and summaries of work hours and earnings.
+
+**State Management:**
+
+```swift
+@MainActor
+struct StatisticsView: View {
+    @Bindable var viewModel: ClockViewModel
+    @State private var selectedPeriod: StatisticsPeriod = .sixMonths
+    @State private var selectedMetric: StatisticsMetric = .hours
+    @State private var hoveredPoint: ChartDataPoint?
+}
+```
+
+**Period Selection:**
+
+| Period | Behavior                                                            |
+| ------ | ------------------------------------------------------------------- |
+| 1M     | Daily bar chart for the current month (up to today)                 |
+| 3M     | Monthly bar chart for the past 3 months                             |
+| 6M     | Monthly bar chart for the past 6 months (default)                   |
+| 12M    | Monthly bar chart for the past 12 months                            |
+| All    | Monthly bar chart showing all months with data + recent zero months |
+
+**Metric Selection (visible only when earnings enabled):**
+
+| Metric   | Chart Y-axis | Bar Color    | Summary Values                      |
+| -------- | ------------ | ------------ | ----------------------------------- |
+| Hours    | Hours        | Accent color | Total (h), Average (h/period), Peak |
+| Earnings | Earnings (¥) | Orange       | Total (¥), Average (¥/period), Peak |
+
+**Chart Interaction:**
+
+- Hover over bars to see tooltip with date label and value
+- Hovered bar gets full opacity; others remain at 0.7
+
+**Summary Cards:**
+
+- **Total**: Sum of all values in the period
+- **Average**: Mean of non-zero values only
+- **Peak**: Maximum value with its date label
+
+**UI Layout:**
+
+```
+┌─ Controls ─────────────────────────────┐
+│ [1M | 3M | 6M | 12M | All]  [H | E]  │
+├─ Chart ────────────────────────────────┤
+│   ▐ ▐ ▐ ▐ ▐ ▐  (bar chart)           │
+├─ Summary ──────────────────────────────┤
+│  Total    Average    Peak              │
+└────────────────────────────────────────┘
+```
+
+**Window size:** 560pt minimum width, 460pt minimum height
+
 ### DataStore
 
 ```swift
@@ -611,6 +745,43 @@ final class NotificationManager {
         try? await center.add(request)
     }
 
+    func sendClockInNotification() async {
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Clocklet"
+        let timeString = DateFormatters.timeOnly.string(from: Date())
+        content.body = "Clocked in at \(timeString)"
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+
+        try? await center.add(request)
+    }
+
+    func sendClockOutNotification(durationSeconds: Int) async {
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Clocklet"
+        content.body = "Clocked out. Duration: \(DurationFormatter.format(durationSeconds))"
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+
+        try? await center.add(request)
+    }
+
     func showIncompleteSessionNotification() async {
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized else { return }
@@ -634,6 +805,7 @@ final class NotificationManager {
 ### ReminderScheduler
 
 ```swift
+@MainActor
 final class ReminderScheduler {
     private var timer: Timer?
     private let notificationManager: NotificationManager
@@ -718,26 +890,31 @@ final class SleepWatcher {
 ```swift
 import Foundation
 
-final class SettingsManager {
+final class SettingsManager: Sendable {
     static let shared = SettingsManager()
 
     private let defaults = UserDefaults.standard
 
     private init() {}
 
-    var reminderThresholdMinutes: Int {
-        get { defaults.object(forKey: SettingsKey.reminderThresholdMinutes.rawValue) as? Int ?? 60 }
-        set { defaults.set(newValue, forKey: SettingsKey.reminderThresholdMinutes.rawValue) }
-    }
-
     var reminderEnabled: Bool {
         get { defaults.object(forKey: SettingsKey.reminderEnabled.rawValue) as? Bool ?? true }
         set { defaults.set(newValue, forKey: SettingsKey.reminderEnabled.rawValue) }
     }
 
+    var reminderThresholdMinutes: Int {
+        get { defaults.object(forKey: SettingsKey.reminderThresholdMinutes.rawValue) as? Int ?? 60 }
+        set { defaults.set(newValue, forKey: SettingsKey.reminderThresholdMinutes.rawValue) }
+    }
+
     var reminderRepeatMinutes: Int? {
         get { defaults.object(forKey: SettingsKey.reminderRepeatMinutes.rawValue) as? Int }
         set { defaults.set(newValue, forKey: SettingsKey.reminderRepeatMinutes.rawValue) }
+    }
+
+    var clockEventNotificationEnabled: Bool {
+        get { defaults.object(forKey: SettingsKey.clockEventNotificationEnabled.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: SettingsKey.clockEventNotificationEnabled.rawValue) }
     }
 
     var stopOnSleep: Bool {
@@ -786,15 +963,20 @@ var hourlyRate: Int {
     get { defaults.object(forKey: SettingsKey.hourlyRate.rawValue) as? Int ?? 0 }
     set { defaults.set(newValue, forKey: SettingsKey.hourlyRate.rawValue) }
 }
+
+/// Convenience: true when both enabled and rate > 0
+var isEarningsEnabled: Bool {
+    hourlyRateEnabled && hourlyRate > 0
+}
 ```
 
 ### Display Integration
 
-Earnings are displayed alongside duration when `hourlyRateEnabled && hourlyRate > 0`:
+Earnings are displayed alongside duration when `isEarningsEnabled`:
 
-- **MenuBarView**: Shows earnings in parentheses after duration
+- **MenuBarView**: Shows earnings as orange caption below each duration row
 - **HistoryView**: Shows earnings per entry and per day total
-- **StatisticsView**: Shows monthly earnings alongside hours
+- **StatisticsView**: Metric switcher (Hours / Earnings) with bar chart and summary cards
 
 ## Key Flows
 
@@ -808,6 +990,7 @@ ClockViewModel.clockIn()
     ├── Create CurrentSession with current timestamp
     ├── Save to JSON immediately (crash recovery)
     ├── Start ReminderScheduler timer
+    ├── Send clock-in notification (if enabled)
     └── Update UI (icon turns green)
 ```
 
@@ -823,6 +1006,7 @@ ClockViewModel.clockOut()
     ├── Clear currentSession
     ├── Save to JSON
     ├── Stop ReminderScheduler
+    ├── Send clock-out notification with duration (if enabled)
     └── Update UI (icon turns gray)
 ```
 
@@ -892,5 +1076,5 @@ xcodebuild -scheme Clocklet -configuration Release archive
 
 ---
 
-_Document Version: 1.4_
-_Last Updated: 2026-03-16_
+_Document Version: 1.5_
+_Last Updated: 2026-03-24_

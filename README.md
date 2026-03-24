@@ -7,7 +7,10 @@ A lightweight macOS menu bar app for tracking work hours. Designed for freelance
 - **One-Click Tracking**: Clock in/out directly from the menu bar
 - **Global Shortcut**: Configure a keyboard shortcut for quick access
 - **Daily & Monthly Summaries**: View your work hours at a glance
+- **Statistics**: Visualize work hours and earnings with interactive bar charts
+- **Hourly Rate**: Track earnings based on configurable hourly rate (JPY)
 - **Reminder Notifications**: Get notified if you forget to clock out
+- **Clock Event Notifications**: Optional notifications on clock in/out
 - **History Management**: View, edit, and bulk delete past entries
 - **Sleep Detection**: Automatically clock out when your Mac sleeps (configurable)
 - **Crash Recovery**: Sessions are preserved even if the app crashes
@@ -18,7 +21,7 @@ _Coming soon_
 
 ## Requirements
 
-- macOS 15.0 (Sequoia) or later
+- macOS 26.2 or later
 - Apple Silicon or Intel Mac
 
 ## Installation
@@ -47,7 +50,8 @@ _Coming soon_
 1. **Clock In**: Click the clock icon in the menu bar and select "Clock In"
 2. **Clock Out**: Click again and select "Clock Out"
 3. **View History**: Access your time entries from the menu
-4. **Settings**: Configure shortcuts, reminders, and other preferences
+4. **View Statistics**: See charts of your work hours and earnings over time
+5. **Settings**: Configure shortcuts, reminders, hourly rate, and other preferences
 
 ### Keyboard Shortcut
 
