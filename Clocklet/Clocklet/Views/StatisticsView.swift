@@ -50,20 +50,60 @@ struct StatisticsView: View {
   @State private var selectedPeriod: StatisticsPeriod = .sixMonths
   @State private var selectedMetric: StatisticsMetric = .hours
   @State private var hoveredPoint: ChartDataPoint?
+  @State private var timelineMonthOffset = 0
+
+  private var calendar: Calendar { Calendar.current }
+  private var currentMonth: Date {
+    calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+  }
+  private var maxTimelineOffset: Int {
+    guard let oldestMonth = viewModel.oldestStatisticsMonth else { return 0 }
+    return max(calendar.dateComponents([.month], from: oldestMonth, to: currentMonth).month ?? 0, 0)
+  }
+  private var effectiveTimelineMonthOffset: Int {
+    min(timelineMonthOffset, maxTimelineOffset)
+  }
+  private var timelineAnchorMonth: Date {
+    calendar.date(byAdding: .month, value: -effectiveTimelineMonthOffset, to: currentMonth)
+      ?? currentMonth
+  }
+  private var canNavigateBackward: Bool {
+    selectedPeriod != .all && effectiveTimelineMonthOffset < maxTimelineOffset
+  }
+  private var canNavigateForward: Bool {
+    selectedPeriod != .all && effectiveTimelineMonthOffset > 0
+  }
+  private var timelineTitle: String {
+    if selectedPeriod.isDaily {
+      return DateFormatters.monthYear.string(from: timelineAnchorMonth)
+    }
+    guard let monthCount = selectedPeriod.monthCount else {
+      return "All Time"
+    }
+    guard
+      let startMonth = calendar.date(
+        byAdding: .month, value: -(monthCount - 1), to: timelineAnchorMonth)
+    else {
+      return DateFormatters.monthYear.string(from: timelineAnchorMonth)
+    }
+    return
+      "\(DateFormatters.monthYear.string(from: startMonth)) - \(DateFormatters.monthYear.string(from: timelineAnchorMonth))"
+  }
 
   private var chartData: [ChartDataPoint] {
     if selectedPeriod.isDaily {
-      return viewModel.dailyStatistics().map {
+      return viewModel.dailyStatistics(forMonthContaining: timelineAnchorMonth).map {
         ChartDataPoint(
           id: $0.id, label: $0.displayLabel, shortLabel: $0.shortLabel,
           totalSeconds: $0.totalSeconds)
       }
     }
-    let allStats = viewModel.monthlyStatistics(months: 120)
     let filtered: [MonthlyStatistics]
     if let monthCount = selectedPeriod.monthCount {
-      filtered = Array(allStats.suffix(monthCount))
+      filtered = viewModel.monthlyStatistics(months: monthCount, endingAt: timelineAnchorMonth)
     } else {
+      let monthSpan = max(maxTimelineOffset + 1, 3)
+      let allStats = viewModel.monthlyStatistics(months: monthSpan, endingAt: currentMonth)
       filtered = allStats.filter { $0.totalSeconds > 0 || isRecentMonth($0) }
     }
     return filtered.map {
@@ -128,6 +168,14 @@ struct StatisticsView: View {
 
       Divider()
 
+      if selectedPeriod != .all {
+        timelineNavigator
+          .padding(.horizontal, 20)
+          .padding(.vertical, 12)
+
+        Divider()
+      }
+
       if !hasData {
         emptyState
       } else {
@@ -148,6 +196,10 @@ struct StatisticsView: View {
       }
     }
     .frame(minWidth: 560, idealWidth: 600, minHeight: 460, idealHeight: 500)
+    .onChange(of: selectedPeriod) { _, _ in
+      timelineMonthOffset = 0
+      hoveredPoint = nil
+    }
   }
 
   private var periodSelector: some View {
@@ -168,6 +220,29 @@ struct StatisticsView: View {
     }
     .pickerStyle(.segmented)
     .frame(maxWidth: 180)
+  }
+
+  private var timelineNavigator: some View {
+    HStack(spacing: 12) {
+      Button(action: navigateBackward) {
+        Image(systemName: "chevron.left")
+      }
+      .disabled(!canNavigateBackward)
+
+      Spacer()
+
+      Text(timelineTitle)
+        .font(.headline)
+        .monospacedDigit()
+
+      Spacer()
+
+      Button(action: navigateForward) {
+        Image(systemName: "chevron.right")
+      }
+      .disabled(!canNavigateForward)
+    }
+    .buttonStyle(.borderless)
   }
 
   private var emptyState: some View {
@@ -269,6 +344,18 @@ struct StatisticsView: View {
           }
         }
     }
+  }
+
+  private func navigateBackward() {
+    guard canNavigateBackward else { return }
+    hoveredPoint = nil
+    timelineMonthOffset = effectiveTimelineMonthOffset + 1
+  }
+
+  private func navigateForward() {
+    guard canNavigateForward else { return }
+    hoveredPoint = nil
+    timelineMonthOffset = max(effectiveTimelineMonthOffset - 1, 0)
   }
 
   private func summarySection(data: [ChartDataPoint]) -> some View {

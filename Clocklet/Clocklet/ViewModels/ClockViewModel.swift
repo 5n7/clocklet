@@ -100,35 +100,19 @@ final class ClockViewModel {
     data.currentSession != nil
   }
 
-  /// Get monthly statistics for the specified number of months
-  func monthlyStatistics(months: Int = 12) -> [MonthlyStatistics] {
+  /// Get monthly statistics for the specified number of months ending at the target month.
+  func monthlyStatistics(months: Int = 12, endingAt endDate: Date = Date()) -> [MonthlyStatistics] {
     let calendar = Calendar.current
     let now = Date()
-
-    // Create a dictionary to store durations by year-month key
-    var durationsByMonth: [String: Int] = [:]
-
-    // Group entries by month
-    for entry in data.entries {
-      let components = calendar.dateComponents([.year, .month], from: entry.clockIn)
-      guard let year = components.year, let month = components.month else { continue }
-      let key = MonthlyStatistics.makeKey(year: year, month: month)
-      durationsByMonth[key, default: 0] += entry.durationSeconds
+    guard let endMonth = monthStart(containing: endDate) else {
+      return []
     }
 
-    // Include current session duration if tracking
-    if let session = data.currentSession {
-      let sessionComponents = calendar.dateComponents([.year, .month], from: session.clockIn)
-      if let sessionYear = sessionComponents.year, let sessionMonth = sessionComponents.month {
-        let key = MonthlyStatistics.makeKey(year: sessionYear, month: sessionMonth)
-        durationsByMonth[key, default: 0] += Int(now.timeIntervalSince(session.clockIn))
-      }
-    }
+    let durationsByMonth = durationsByMonth(now: now, calendar: calendar)
 
-    // Generate statistics for the past N months (including current month)
     var statistics: [MonthlyStatistics] = []
     for i in 0..<months {
-      guard let date = calendar.date(byAdding: .month, value: -i, to: now) else { continue }
+      guard let date = calendar.date(byAdding: .month, value: -i, to: endMonth) else { continue }
       let components = calendar.dateComponents([.year, .month], from: date)
       guard let year = components.year, let month = components.month else { continue }
       let key = MonthlyStatistics.makeKey(year: year, month: month)
@@ -136,28 +120,28 @@ final class ClockViewModel {
       statistics.append(MonthlyStatistics(year: year, month: month, totalSeconds: totalSeconds))
     }
 
-    // Reverse to get chronological order (oldest first)
     return statistics.reversed()
   }
 
-  /// Get daily statistics for the current month
-  func dailyStatistics() -> [DailyStatistics] {
+  /// Get daily statistics for the specified month.
+  func dailyStatistics(forMonthContaining date: Date = Date()) -> [DailyStatistics] {
     let calendar = Calendar.current
     let now = Date()
-    let currentComponents = calendar.dateComponents([.year, .month], from: now)
-    guard let year = currentComponents.year, let month = currentComponents.month else {
+    guard let targetMonth = monthStart(containing: date) else {
       return []
     }
 
-    // Get the range of days in the current month
-    guard let range = calendar.range(of: .day, in: .month, for: now) else {
+    let targetComponents = calendar.dateComponents([.year, .month], from: targetMonth)
+    guard let year = targetComponents.year, let month = targetComponents.month else {
       return []
     }
 
-    // Create a dictionary to store durations by day key
+    guard let range = calendar.range(of: .day, in: .month, for: targetMonth) else {
+      return []
+    }
+
     var durationsByDay: [String: Int] = [:]
 
-    // Group entries by day (only current month)
     for entry in data.entries {
       let components = calendar.dateComponents([.year, .month, .day], from: entry.clockIn)
       guard let entryYear = components.year, let entryMonth = components.month,
@@ -168,7 +152,6 @@ final class ClockViewModel {
       durationsByDay[key, default: 0] += entry.durationSeconds
     }
 
-    // Include current session duration if tracking
     if let session = data.currentSession {
       let sessionComponents = calendar.dateComponents([.year, .month, .day], from: session.clockIn)
       if let sessionYear = sessionComponents.year, let sessionMonth = sessionComponents.month,
@@ -176,15 +159,17 @@ final class ClockViewModel {
         sessionYear == year, sessionMonth == month
       {
         let key = DailyStatistics.makeKey(year: sessionYear, month: sessionMonth, day: sessionDay)
-        durationsByDay[key, default: 0] += Int(now.timeIntervalSince(session.clockIn))
+        durationsByDay[key, default: 0] += statisticsDuration(
+          for: session, now: now, calendar: calendar)
       }
     }
 
-    // Generate statistics for each day in the month up to today
-    let today = calendar.component(.day, from: now)
+    let isCurrentMonth = calendar.isDate(targetMonth, equalTo: now, toGranularity: .month)
+    let lastDay = isCurrentMonth ? calendar.component(.day, from: now) : (range.last ?? 0)
+
     var statistics: [DailyStatistics] = []
     for day in range {
-      if day > today { break }
+      if day > lastDay { break }
       let key = DailyStatistics.makeKey(year: year, month: month, day: day)
       let totalSeconds = durationsByDay[key] ?? 0
       statistics.append(
@@ -192,6 +177,57 @@ final class ClockViewModel {
     }
 
     return statistics
+  }
+
+  var oldestStatisticsMonth: Date? {
+    let oldestEntry = data.entries.map(\.clockIn).min()
+    let oldestSession = data.currentSession?.clockIn
+    let oldestDate = [oldestEntry, oldestSession].compactMap { $0 }.min()
+    guard let oldestDate else { return nil }
+    return monthStart(containing: oldestDate)
+  }
+
+  private func durationsByMonth(now: Date, calendar: Calendar) -> [String: Int] {
+    var durationsByMonth: [String: Int] = [:]
+
+    for entry in data.entries {
+      let components = calendar.dateComponents([.year, .month], from: entry.clockIn)
+      guard let year = components.year, let month = components.month else { continue }
+      let key = MonthlyStatistics.makeKey(year: year, month: month)
+      durationsByMonth[key, default: 0] += entry.durationSeconds
+    }
+
+    if let session = data.currentSession {
+      let sessionComponents = calendar.dateComponents([.year, .month], from: session.clockIn)
+      if let sessionYear = sessionComponents.year, let sessionMonth = sessionComponents.month {
+        let key = MonthlyStatistics.makeKey(year: sessionYear, month: sessionMonth)
+        durationsByMonth[key, default: 0] += statisticsDuration(
+          for: session, now: now, calendar: calendar)
+      }
+    }
+
+    return durationsByMonth
+  }
+
+  private func statisticsDuration(
+    for session: CurrentSession,
+    now: Date,
+    calendar: Calendar
+  ) -> Int {
+    guard let sessionMonthStart = monthStart(containing: session.clockIn),
+      let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: sessionMonthStart)
+    else {
+      return Int(now.timeIntervalSince(session.clockIn))
+    }
+
+    let effectiveEnd = min(now, nextMonthStart)
+    return max(Int(effectiveEnd.timeIntervalSince(session.clockIn)), 0)
+  }
+
+  private func monthStart(containing date: Date) -> Date? {
+    let calendar = Calendar.current
+    let components = calendar.dateComponents([.year, .month], from: date)
+    return calendar.date(from: components)
   }
 
   func toggle() {
