@@ -3,6 +3,7 @@
 //  Clocklet
 //
 
+import AppKit
 import Foundation
 import UserNotifications
 
@@ -28,7 +29,7 @@ final class NotificationManager {
     let content = UNMutableNotificationContent()
     content.title = "Clocklet"
     content.body = "Did you forget to Clock Out?"
-    content.sound = .default
+    applyNotificationSound(to: content)
 
     let request = UNNotificationRequest(
       identifier: UUID().uuidString,
@@ -47,7 +48,7 @@ final class NotificationManager {
     content.title = "Clocklet"
     let timeString = DateFormatters.timeOnly.string(from: Date())
     content.body = "Clocked in at \(timeString)"
-    content.sound = .default
+    applyNotificationSound(to: content)
 
     let request = UNNotificationRequest(
       identifier: UUID().uuidString,
@@ -65,7 +66,7 @@ final class NotificationManager {
     let content = UNMutableNotificationContent()
     content.title = "Clocklet"
     content.body = "Clocked out. Duration: \(DurationFormatter.format(durationSeconds))"
-    content.sound = .default
+    applyNotificationSound(to: content)
 
     let request = UNNotificationRequest(
       identifier: UUID().uuidString,
@@ -83,7 +84,7 @@ final class NotificationManager {
     let content = UNMutableNotificationContent()
     content.title = "Clocklet"
     content.body = "Incomplete session found. Please set the Clock Out time."
-    content.sound = .default
+    applyNotificationSound(to: content)
 
     let request = UNNotificationRequest(
       identifier: "incomplete-session",
@@ -92,5 +93,19 @@ final class NotificationManager {
     )
 
     try? await center.add(request)
+  }
+
+  private func applyNotificationSound(to content: UNMutableNotificationContent) {
+    let sound = SettingsManager.shared.notificationSound
+
+    switch sound {
+    case .default:
+      content.sound = .default
+    case .none:
+      content.sound = nil
+    default:
+      content.sound = nil
+      NSSound(named: NSSound.Name(sound.rawValue))?.play()
+    }
   }
 }

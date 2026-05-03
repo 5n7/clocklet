@@ -3,6 +3,7 @@
 //  Clocklet
 //
 
+import AppKit
 import KeyboardShortcuts
 import LaunchAtLogin
 import SwiftUI
@@ -18,6 +19,7 @@ struct SettingsView: View {
   @State private var stopOnSleep = SettingsManager.shared.stopOnSleep
   @State private var clockEventNotificationEnabled = SettingsManager.shared
     .clockEventNotificationEnabled
+  @State private var notificationSound = SettingsManager.shared.notificationSound
   @State private var hourlyRateEnabled = SettingsManager.shared.hourlyRateEnabled
   @State private var hourlyRateText: String = {
     let rate = SettingsManager.shared.hourlyRate
@@ -103,6 +105,22 @@ struct SettingsView: View {
             SettingsManager.shared.clockEventNotificationEnabled = newValue
           }
 
+        HStack {
+          Picker("Notification sound", selection: $notificationSound) {
+            ForEach(NotificationSound.allCases) { sound in
+              Text(sound.displayName).tag(sound)
+            }
+          }
+          .onChange(of: notificationSound) { _, newValue in
+            SettingsManager.shared.notificationSound = newValue
+          }
+
+          Button("Play") {
+            playNotificationSoundPreview()
+          }
+          .disabled(notificationSound == .none)
+        }
+
         Toggle("Stop tracking on sleep", isOn: $stopOnSleep)
           .onChange(of: stopOnSleep) { _, newValue in
             SettingsManager.shared.stopOnSleep = newValue
@@ -122,7 +140,7 @@ struct SettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .frame(width: 400, height: 450)
+    .frame(width: 400, height: 480)
   }
 
   private func formatMinutes(_ minutes: Int) -> String {
@@ -136,6 +154,17 @@ struct SettingsView: View {
       }
     } else {
       return "\(minutes)m"
+    }
+  }
+
+  private func playNotificationSoundPreview() {
+    switch notificationSound {
+    case .default:
+      NSSound.beep()
+    case .none:
+      break
+    default:
+      NSSound(named: NSSound.Name(notificationSound.rawValue))?.play()
     }
   }
 }
