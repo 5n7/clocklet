@@ -44,48 +44,71 @@ final class ClockViewModel {
     return Date().timeIntervalSince(session.clockIn)
   }
 
-  var todayDuration: TimeInterval {
+  var todayDuration: TimeInterval { todayTotals.duration }
+  var todayEarnings: Int { todayTotals.earnings }
+  var thisMonthDuration: TimeInterval { thisMonthTotals.duration }
+  var thisMonthEarnings: Int { thisMonthTotals.earnings }
+  var lastMonthDuration: TimeInterval { lastMonthTotals.duration }
+  var lastMonthEarnings: Int { lastMonthTotals.earnings }
+
+  private var todayTotals: (duration: TimeInterval, earnings: Int) {
     let now = Date()
     let today = DateFormatters.dateOnly.string(from: now)
-    let completedDuration = data.entries
-      .filter { $0.date == today }
-      .reduce(0) { $0 + TimeInterval($1.durationSeconds) }
-
-    // Add current session duration if tracking
+    var duration: TimeInterval = 0
+    var earnings: Int = 0
+    for entry in data.entries where entry.date == today {
+      duration += TimeInterval(entry.durationSeconds)
+      earnings += entry.earnings
+    }
     if let session = data.currentSession,
       DateFormatters.dateOnly.string(from: session.clockIn) == today
     {
-      return completedDuration + now.timeIntervalSince(session.clockIn)
+      let sessionDuration = now.timeIntervalSince(session.clockIn)
+      duration += sessionDuration
+      earnings += EarningsCalculator.calculate(
+        hourlyRate: session.hourlyRate,
+        durationSeconds: sessionDuration
+      )
     }
-
-    return completedDuration
+    return (duration, earnings)
   }
 
-  var thisMonthDuration: TimeInterval {
+  private var thisMonthTotals: (duration: TimeInterval, earnings: Int) {
     let now = Date()
     let calendar = Calendar.current
-    let completedDuration = data.entries
-      .filter { calendar.isDate($0.clockIn, equalTo: now, toGranularity: .month) }
-      .reduce(0) { $0 + TimeInterval($1.durationSeconds) }
-
-    // Add current session duration if tracking
+    var duration: TimeInterval = 0
+    var earnings: Int = 0
+    for entry in data.entries
+    where calendar.isDate(entry.clockIn, equalTo: now, toGranularity: .month) {
+      duration += TimeInterval(entry.durationSeconds)
+      earnings += entry.earnings
+    }
     if let session = data.currentSession,
       calendar.isDate(session.clockIn, equalTo: now, toGranularity: .month)
     {
-      return completedDuration + now.timeIntervalSince(session.clockIn)
+      let sessionDuration = now.timeIntervalSince(session.clockIn)
+      duration += sessionDuration
+      earnings += EarningsCalculator.calculate(
+        hourlyRate: session.hourlyRate,
+        durationSeconds: sessionDuration
+      )
     }
-
-    return completedDuration
+    return (duration, earnings)
   }
 
-  var lastMonthDuration: TimeInterval {
+  private var lastMonthTotals: (duration: TimeInterval, earnings: Int) {
     let calendar = Calendar.current
     guard let lastMonth = calendar.date(byAdding: .month, value: -1, to: Date()) else {
-      return 0
+      return (0, 0)
     }
-    return data.entries
-      .filter { calendar.isDate($0.clockIn, equalTo: lastMonth, toGranularity: .month) }
-      .reduce(0) { $0 + TimeInterval($1.durationSeconds) }
+    var duration: TimeInterval = 0
+    var earnings: Int = 0
+    for entry in data.entries
+    where calendar.isDate(entry.clockIn, equalTo: lastMonth, toGranularity: .month) {
+      duration += TimeInterval(entry.durationSeconds)
+      earnings += entry.earnings
+    }
+    return (duration, earnings)
   }
 
   /// Entries grouped by date for history view
@@ -108,7 +131,7 @@ final class ClockViewModel {
       return []
     }
 
-    let durationsByMonth = durationsByMonth(now: now, calendar: calendar)
+    let totalsByMonth = totalsByMonth(now: now, calendar: calendar)
 
     var statistics: [MonthlyStatistics] = []
     for i in 0..<months {
@@ -116,8 +139,14 @@ final class ClockViewModel {
       let components = calendar.dateComponents([.year, .month], from: date)
       guard let year = components.year, let month = components.month else { continue }
       let key = MonthlyStatistics.makeKey(year: year, month: month)
-      let totalSeconds = durationsByMonth[key] ?? 0
-      statistics.append(MonthlyStatistics(year: year, month: month, totalSeconds: totalSeconds))
+      let totals = totalsByMonth[key] ?? (seconds: 0, earnings: 0)
+      statistics.append(
+        MonthlyStatistics(
+          year: year,
+          month: month,
+          totalSeconds: totals.seconds,
+          totalEarnings: totals.earnings
+        ))
     }
 
     return statistics.reversed()
@@ -140,7 +169,7 @@ final class ClockViewModel {
       return []
     }
 
-    var durationsByDay: [String: Int] = [:]
+    var totalsByDay: [String: (seconds: Int, earnings: Int)] = [:]
 
     for entry in data.entries {
       let components = calendar.dateComponents([.year, .month, .day], from: entry.clockIn)
@@ -149,7 +178,8 @@ final class ClockViewModel {
         entryYear == year, entryMonth == month
       else { continue }
       let key = DailyStatistics.makeKey(year: entryYear, month: entryMonth, day: entryDay)
-      durationsByDay[key, default: 0] += entry.durationSeconds
+      totalsByDay[key, default: (seconds: 0, earnings: 0)].seconds += entry.durationSeconds
+      totalsByDay[key, default: (seconds: 0, earnings: 0)].earnings += entry.earnings
     }
 
     if let session = data.currentSession {
@@ -159,8 +189,13 @@ final class ClockViewModel {
         sessionYear == year, sessionMonth == month
       {
         let key = DailyStatistics.makeKey(year: sessionYear, month: sessionMonth, day: sessionDay)
-        durationsByDay[key, default: 0] += statisticsDuration(
-          for: session, now: now, calendar: calendar)
+        let duration = statisticsDuration(for: session, now: now, calendar: calendar)
+        totalsByDay[key, default: (seconds: 0, earnings: 0)].seconds += duration
+        totalsByDay[key, default: (seconds: 0, earnings: 0)].earnings +=
+          EarningsCalculator.calculate(
+            hourlyRate: session.hourlyRate,
+            durationSeconds: TimeInterval(duration)
+          )
       }
     }
 
@@ -171,9 +206,15 @@ final class ClockViewModel {
     for day in range {
       if day > lastDay { break }
       let key = DailyStatistics.makeKey(year: year, month: month, day: day)
-      let totalSeconds = durationsByDay[key] ?? 0
+      let totals = totalsByDay[key] ?? (seconds: 0, earnings: 0)
       statistics.append(
-        DailyStatistics(year: year, month: month, day: day, totalSeconds: totalSeconds))
+        DailyStatistics(
+          year: year,
+          month: month,
+          day: day,
+          totalSeconds: totals.seconds,
+          totalEarnings: totals.earnings
+        ))
     }
 
     return statistics
@@ -187,26 +228,32 @@ final class ClockViewModel {
     return monthStart(containing: oldestDate)
   }
 
-  private func durationsByMonth(now: Date, calendar: Calendar) -> [String: Int] {
-    var durationsByMonth: [String: Int] = [:]
+  private func totalsByMonth(now: Date, calendar: Calendar) -> [String: (seconds: Int, earnings: Int)] {
+    var totalsByMonth: [String: (seconds: Int, earnings: Int)] = [:]
 
     for entry in data.entries {
       let components = calendar.dateComponents([.year, .month], from: entry.clockIn)
       guard let year = components.year, let month = components.month else { continue }
       let key = MonthlyStatistics.makeKey(year: year, month: month)
-      durationsByMonth[key, default: 0] += entry.durationSeconds
+      totalsByMonth[key, default: (seconds: 0, earnings: 0)].seconds += entry.durationSeconds
+      totalsByMonth[key, default: (seconds: 0, earnings: 0)].earnings += entry.earnings
     }
 
     if let session = data.currentSession {
       let sessionComponents = calendar.dateComponents([.year, .month], from: session.clockIn)
       if let sessionYear = sessionComponents.year, let sessionMonth = sessionComponents.month {
         let key = MonthlyStatistics.makeKey(year: sessionYear, month: sessionMonth)
-        durationsByMonth[key, default: 0] += statisticsDuration(
-          for: session, now: now, calendar: calendar)
+        let duration = statisticsDuration(for: session, now: now, calendar: calendar)
+        totalsByMonth[key, default: (seconds: 0, earnings: 0)].seconds += duration
+        totalsByMonth[key, default: (seconds: 0, earnings: 0)].earnings +=
+          EarningsCalculator.calculate(
+            hourlyRate: session.hourlyRate,
+            durationSeconds: TimeInterval(duration)
+          )
       }
     }
 
-    return durationsByMonth
+    return totalsByMonth
   }
 
   private func statisticsDuration(
@@ -244,7 +291,11 @@ final class ClockViewModel {
       await notificationManager.requestPermissionIfNeeded()
     }
 
-    data.currentSession = CurrentSession(clockIn: Date())
+    data.currentSession = CurrentSession(
+      clockIn: Date(),
+      jobName: SettingsManager.shared.currentJobName,
+      hourlyRate: SettingsManager.shared.hourlyRate
+    )
     save()
     reminderScheduler.start()
 
@@ -259,7 +310,12 @@ final class ClockViewModel {
     guard let session = data.currentSession else { return }
 
     do {
-      let entry = try TimeEntry(clockIn: session.clockIn, clockOut: Date())
+      let entry = try TimeEntry(
+        clockIn: session.clockIn,
+        clockOut: Date(),
+        jobName: session.jobName,
+        hourlyRate: session.hourlyRate
+      )
       data.entries.append(entry)
       data.currentSession = nil
       save()
@@ -275,9 +331,14 @@ final class ClockViewModel {
     }
   }
 
-  func addEntry(clockIn: Date, clockOut: Date) {
+  func addEntry(clockIn: Date, clockOut: Date, jobName: String, hourlyRate: Int) {
     do {
-      let entry = try TimeEntry(clockIn: clockIn, clockOut: clockOut)
+      let entry = try TimeEntry(
+        clockIn: clockIn,
+        clockOut: clockOut,
+        jobName: jobName,
+        hourlyRate: hourlyRate
+      )
       data.entries.append(entry)
       save()
     } catch {
@@ -285,12 +346,12 @@ final class ClockViewModel {
     }
   }
 
-  func updateEntry(_ entry: TimeEntry, clockIn: Date, clockOut: Date) {
+  func updateEntry(_ entry: TimeEntry, clockIn: Date, clockOut: Date, jobName: String, hourlyRate: Int) {
     guard let index = data.entries.firstIndex(where: { $0.id == entry.id }) else { return }
 
     do {
       var updated = entry
-      try updated.update(clockIn: clockIn, clockOut: clockOut)
+      try updated.update(clockIn: clockIn, clockOut: clockOut, jobName: jobName, hourlyRate: hourlyRate)
       data.entries[index] = updated
       save()
     } catch {
@@ -314,7 +375,12 @@ final class ClockViewModel {
     guard let session = data.currentSession else { return }
 
     do {
-      let entry = try TimeEntry(clockIn: session.clockIn, clockOut: clockOut)
+      let entry = try TimeEntry(
+        clockIn: session.clockIn,
+        clockOut: clockOut,
+        jobName: session.jobName,
+        hourlyRate: session.hourlyRate
+      )
       data.entries.append(entry)
       data.currentSession = nil
       save()

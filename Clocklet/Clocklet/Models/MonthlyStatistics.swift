@@ -10,14 +10,16 @@ struct MonthlyStatistics: Identifiable {
   let year: Int
   let month: Int
   let totalSeconds: Int
+  let totalEarnings: Int
 
   private let date: Date?
 
-  init(year: Int, month: Int, totalSeconds: Int) {
+  init(year: Int, month: Int, totalSeconds: Int, totalEarnings: Int = 0) {
     self.id = Self.makeKey(year: year, month: month)
     self.year = year
     self.month = month
     self.totalSeconds = max(0, totalSeconds)
+    self.totalEarnings = max(0, totalEarnings)
 
     var components = DateComponents()
     components.year = year

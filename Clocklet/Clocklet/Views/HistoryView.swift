@@ -96,16 +96,27 @@ struct HistoryView: View {
       .sheet(item: $selectedEntry) { entry in
         EditEntryView(
           mode: .edit(entry),
-          onSave: { clockIn, clockOut in
-            viewModel.updateEntry(entry, clockIn: clockIn, clockOut: clockOut)
+          onSave: { clockIn, clockOut, jobName, hourlyRate in
+            viewModel.updateEntry(
+              entry,
+              clockIn: clockIn,
+              clockOut: clockOut,
+              jobName: jobName,
+              hourlyRate: hourlyRate
+            )
           }
         )
       }
       .sheet(isPresented: $isAddingEntry) {
         EditEntryView(
           mode: .add,
-          onSave: { clockIn, clockOut in
-            viewModel.addEntry(clockIn: clockIn, clockOut: clockOut)
+          onSave: { clockIn, clockOut, jobName, hourlyRate in
+            viewModel.addEntry(
+              clockIn: clockIn,
+              clockOut: clockOut,
+              jobName: jobName,
+              hourlyRate: hourlyRate
+            )
           }
         )
       }
@@ -154,6 +165,7 @@ struct HistoryView: View {
 
   private func sectionHeader(for date: String, entries: [TimeEntry]) -> some View {
     let totalSeconds = entries.reduce(0) { $0 + $1.durationSeconds }
+    let totalEarnings = entries.reduce(0) { $0 + $1.earnings }
     return HStack(spacing: 6) {
       Text(formatDateHeader(date))
       Spacer()
@@ -162,14 +174,7 @@ struct HistoryView: View {
       if showEarnings {
         Text("·")
           .foregroundColor(.secondary.opacity(0.5))
-        Text(
-          EarningsCalculator.format(
-            EarningsCalculator.calculate(
-              hourlyRate: SettingsManager.shared.hourlyRate,
-              durationSeconds: TimeInterval(totalSeconds)
-            )
-          )
-        )
+        Text(EarningsCalculator.format(totalEarnings))
         .foregroundColor(.orange)
       }
     }
@@ -205,6 +210,10 @@ struct HistoryRowView: View {
         .font(.body)
         .monospacedDigit()
 
+        Text(entry.jobName)
+          .font(.caption)
+          .foregroundColor(.secondary)
+
         if entry.modifiedAt != nil {
           Text("Edited")
             .font(.caption)
@@ -220,17 +229,15 @@ struct HistoryRowView: View {
           .monospacedDigit()
 
         if showEarnings {
-          Text(
-            EarningsCalculator.format(
-              EarningsCalculator.calculate(
-                hourlyRate: SettingsManager.shared.hourlyRate,
-                durationSeconds: TimeInterval(entry.durationSeconds)
-              )
-            )
-          )
+          Text(EarningsCalculator.format(entry.earnings))
           .font(.caption)
           .foregroundColor(.orange)
           .monospacedDigit()
+
+          Text("¥\(entry.hourlyRate)/h")
+            .font(.caption2)
+            .foregroundColor(.secondary)
+            .monospacedDigit()
         }
       }
     }

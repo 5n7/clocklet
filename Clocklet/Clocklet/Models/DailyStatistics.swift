@@ -11,15 +11,17 @@ struct DailyStatistics: Identifiable {
   let month: Int
   let day: Int
   let totalSeconds: Int
+  let totalEarnings: Int
 
   private let date: Date?
 
-  init(year: Int, month: Int, day: Int, totalSeconds: Int) {
+  init(year: Int, month: Int, day: Int, totalSeconds: Int, totalEarnings: Int = 0) {
     self.id = Self.makeKey(year: year, month: month, day: day)
     self.year = year
     self.month = month
     self.day = day
     self.totalSeconds = max(0, totalSeconds)
+    self.totalEarnings = max(0, totalEarnings)
 
     var components = DateComponents()
     components.year = year

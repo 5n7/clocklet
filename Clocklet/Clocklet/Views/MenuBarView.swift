@@ -53,6 +53,8 @@ struct MenuBarView: View {
   @Environment(\.openWindow) private var openWindow
   @Environment(\.openSettings) private var openSettings
 
+  private var jobProfiles: [JobProfile] { SettingsManager.shared.jobProfiles }
+  private var selectedJobProfileID: UUID { SettingsManager.shared.selectedJobProfileID }
   private var showEarnings: Bool { SettingsManager.shared.isEarningsEnabled }
 
   var body: some View {
@@ -79,10 +81,28 @@ struct MenuBarView: View {
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
 
+      jobSwitcher
+
+      Divider()
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+
       // Duration rows
-      durationRow(label: "Today:", duration: viewModel.todayDuration)
-      durationRow(label: "This Month:", duration: viewModel.thisMonthDuration)
-      durationRow(label: "Last Month:", duration: viewModel.lastMonthDuration)
+      durationRow(
+        label: "Today:",
+        duration: viewModel.todayDuration,
+        earnings: viewModel.todayEarnings
+      )
+      durationRow(
+        label: "This Month:",
+        duration: viewModel.thisMonthDuration,
+        earnings: viewModel.thisMonthEarnings
+      )
+      durationRow(
+        label: "Last Month:",
+        duration: viewModel.lastMonthDuration,
+        earnings: viewModel.lastMonthEarnings
+      )
 
       // Current session info
       if viewModel.isTracking, let session = viewModel.data.currentSession {
@@ -90,8 +110,13 @@ struct MenuBarView: View {
           Text("Started:")
             .foregroundColor(.secondary)
           Spacer()
-          Text(DateFormatters.timeOnly.string(from: session.clockIn))
-            .monospacedDigit()
+          VStack(alignment: .trailing, spacing: 2) {
+            Text(DateFormatters.timeOnly.string(from: session.clockIn))
+              .monospacedDigit()
+            Text(session.jobName)
+              .font(.caption)
+              .foregroundColor(.secondary)
+          }
         }
         .font(.callout)
         .padding(.horizontal, 16)
@@ -150,12 +175,47 @@ struct MenuBarView: View {
         Text("Quit")
       }
     }
-    .frame(width: 230)
+    .frame(width: 260)
     .padding(.vertical, 6)
     .background(ArrowCursorView())
   }
 
-  private func durationRow(label: String, duration: TimeInterval) -> some View {
+  private var jobSwitcher: some View {
+    let label = viewModel.isTracking ? "Next Job:" : "Job:"
+
+    return VStack(alignment: .leading, spacing: 2) {
+      Text(label)
+        .font(.caption)
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 2)
+
+      ForEach(jobProfiles) { job in
+        MenuRow(action: {
+          SettingsManager.shared.selectedJobProfileID = job.id
+        }) {
+          HStack(spacing: 8) {
+            Image(systemName: selectedJobProfileID == job.id ? "checkmark.circle.fill" : "circle")
+              .foregroundColor(selectedJobProfileID == job.id ? .accentColor : .secondary)
+
+            Text(job.name)
+              .lineLimit(1)
+
+            Spacer()
+
+            if showEarnings {
+              Text("¥\(job.hourlyRate)/h")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private func durationRow(label: String, duration: TimeInterval, earnings: Int) -> some View {
     HStack(alignment: .top) {
       Text(label)
         .foregroundColor(.secondary)
@@ -164,14 +224,7 @@ struct MenuBarView: View {
         Text(DurationFormatter.format(duration))
           .monospacedDigit()
         if showEarnings {
-          Text(
-            EarningsCalculator.format(
-              EarningsCalculator.calculate(
-                hourlyRate: SettingsManager.shared.hourlyRate,
-                durationSeconds: duration
-              )
-            )
-          )
+          Text(EarningsCalculator.format(earnings))
           .font(.caption)
           .foregroundColor(.orange)
           .monospacedDigit()

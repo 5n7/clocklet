@@ -21,10 +21,8 @@ struct SettingsView: View {
     .clockEventNotificationEnabled
   @State private var notificationSound = SettingsManager.shared.notificationSound
   @State private var hourlyRateEnabled = SettingsManager.shared.hourlyRateEnabled
-  @State private var hourlyRateText: String = {
-    let rate = SettingsManager.shared.hourlyRate
-    return rate > 0 ? "\(rate)" : ""
-  }()
+  @State private var jobProfiles = SettingsManager.shared.jobProfiles
+  @State private var selectedJobProfileID = SettingsManager.shared.selectedJobProfileID
 
   private let thresholdOptions = [15, 30, 45, 60, 90, 120, 180, 240, 300, 360, 480]
   private let repeatOptions = [0, 15, 30, 60]  // 0 = off
@@ -65,36 +63,76 @@ struct SettingsView: View {
         }
       }
 
-      // Hourly Rate Section
-      Section("Hourly Rate") {
+      // Jobs Section
+      Section("Jobs") {
         Toggle("Enable earnings display", isOn: $hourlyRateEnabled)
           .onChange(of: hourlyRateEnabled) { _, newValue in
             SettingsManager.shared.hourlyRateEnabled = newValue
           }
 
-        if hourlyRateEnabled {
+        Picker("Current Job", selection: $selectedJobProfileID) {
+          ForEach(jobProfiles) { job in
+            Text(job.name).tag(job.id)
+          }
+        }
+        .onChange(of: selectedJobProfileID) { _, newValue in
+          SettingsManager.shared.selectedJobProfileID = newValue
+        }
+
+        ForEach(jobProfiles) { job in
           HStack {
-            Text("Rate")
+            TextField("Job", text: jobNameBinding(for: job.id))
+              .textFieldStyle(.roundedBorder)
+              .onSubmit {
+                commitJobName(id: job.id)
+              }
+
             Spacer()
+
             Text("¥")
               .foregroundColor(.secondary)
-            TextField("", text: $hourlyRateText, prompt: Text("0"))
+
+            TextField("0", value: hourlyRateBinding(for: job.id), format: .number)
               .monospacedDigit()
               .frame(width: 80)
               .multilineTextAlignment(.trailing)
               .textFieldStyle(.roundedBorder)
-              .onChange(of: hourlyRateText) { _, newValue in
-                let filtered = newValue.filter { $0.isNumber }
-                let clamped = min(Int(filtered) ?? 0, 1_000_000)
-                let result = filtered.isEmpty ? "" : "\(clamped)"
-                if result != newValue {
-                  hourlyRateText = result
-                }
-                SettingsManager.shared.hourlyRate = clamped
-              }
+
             Text("/ hour")
               .foregroundColor(.secondary)
+
+            Button {
+              moveJob(job, by: -1)
+            } label: {
+              Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!canMoveJob(job, by: -1))
+
+            Button {
+              moveJob(job, by: 1)
+            } label: {
+              Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!canMoveJob(job, by: 1))
+
+            Button(role: .destructive) {
+              deleteJob(job)
+            } label: {
+              Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .disabled(jobProfiles.count <= 1)
           }
+        }
+
+        Button {
+          let profile = SettingsManager.shared.addJobProfile()
+          jobProfiles = SettingsManager.shared.jobProfiles
+          selectedJobProfileID = profile.id
+        } label: {
+          Label("Add Job", systemImage: "plus")
         }
       }
 
@@ -140,7 +178,82 @@ struct SettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .frame(width: 400, height: 480)
+    .frame(width: 460, height: 560)
+    .onAppear {
+      refreshSettingsState()
+    }
+    .onDisappear {
+      commitJobNames()
+    }
+  }
+
+  private func jobNameBinding(for id: JobProfile.ID) -> Binding<String> {
+    Binding {
+      jobProfiles.first { $0.id == id }?.name ?? ""
+    } set: { newValue in
+      updateLocalJob(id: id) { job in
+        job = JobProfile(id: job.id, name: newValue, hourlyRate: job.hourlyRate)
+      }
+    }
+  }
+
+  private func hourlyRateBinding(for id: JobProfile.ID) -> Binding<Int> {
+    Binding {
+      jobProfiles.first { $0.id == id }?.hourlyRate ?? 0
+    } set: { newValue in
+      updateLocalJob(id: id) { job in
+        job = JobProfile(id: job.id, name: job.name, hourlyRate: min(max(0, newValue), 1_000_000))
+      }
+    }
+  }
+
+  private func refreshSettingsState() {
+    hourlyRateEnabled = SettingsManager.shared.hourlyRateEnabled
+    jobProfiles = SettingsManager.shared.jobProfiles
+    selectedJobProfileID = SettingsManager.shared.selectedJobProfileID
+  }
+
+  private func updateLocalJob(id: JobProfile.ID, update: (inout JobProfile) -> Void) {
+    guard let index = jobProfiles.firstIndex(where: { $0.id == id }) else { return }
+    update(&jobProfiles[index])
+    SettingsManager.shared.updateJobProfile(jobProfiles[index])
+  }
+
+  private func commitJobName(id: JobProfile.ID) {
+    updateLocalJob(id: id) { job in
+      job = JobProfile(
+        id: job.id,
+        name: JobProfile.committedName(job.name),
+        hourlyRate: job.hourlyRate
+      )
+    }
+  }
+
+  private func commitJobNames() {
+    for job in jobProfiles {
+      commitJobName(id: job.id)
+    }
+  }
+
+  private func canMoveJob(_ job: JobProfile, by offset: Int) -> Bool {
+    guard let index = jobProfiles.firstIndex(where: { $0.id == job.id }) else { return false }
+    return jobProfiles.indices.contains(index + offset)
+  }
+
+  private func moveJob(_ job: JobProfile, by offset: Int) {
+    guard let index = jobProfiles.firstIndex(where: { $0.id == job.id }) else { return }
+    let destination = index + offset
+    guard jobProfiles.indices.contains(destination) else { return }
+
+    jobProfiles.swapAt(index, destination)
+    SettingsManager.shared.jobProfiles = jobProfiles
+    selectedJobProfileID = SettingsManager.shared.selectedJobProfileID
+  }
+
+  private func deleteJob(_ job: JobProfile) {
+    SettingsManager.shared.deleteJobProfile(id: job.id)
+    jobProfiles = SettingsManager.shared.jobProfiles
+    selectedJobProfileID = SettingsManager.shared.selectedJobProfileID
   }
 
   private func formatMinutes(_ minutes: Int) -> String {

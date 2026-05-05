@@ -11,6 +11,8 @@ struct ClockletApp: App {
   private var viewModel: ClockViewModel { ClockViewModel.shared }
 
   init() {
+    SettingsManager.shared.bootstrap()
+
     // Setup global keyboard shortcut
     KeyboardShortcuts.onKeyUp(for: .toggleClock) {
       Task { @MainActor in
