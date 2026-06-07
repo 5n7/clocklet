@@ -202,7 +202,7 @@ struct SettingsView: View {
       jobProfiles.first { $0.id == id }?.hourlyRate ?? 0
     } set: { newValue in
       updateLocalJob(id: id) { job in
-        job = JobProfile(id: job.id, name: job.name, hourlyRate: min(max(0, newValue), 1_000_000))
+        job.hourlyRate = JobProfile.clampRate(newValue)
       }
     }
   }
@@ -221,11 +221,7 @@ struct SettingsView: View {
 
   private func commitJobName(id: JobProfile.ID) {
     updateLocalJob(id: id) { job in
-      job = JobProfile(
-        id: job.id,
-        name: JobProfile.committedName(job.name),
-        hourlyRate: job.hourlyRate
-      )
+      job.name = JobProfile.committedName(job.name)
     }
   }
 

@@ -21,6 +21,7 @@ enum SettingsKey: String {
 
 struct JobProfile: Codable, Identifiable, Equatable {
   static let defaultJobName = "Work"
+  static let maxHourlyRate = 1_000_000
 
   let id: UUID
   var name: String
@@ -29,12 +30,16 @@ struct JobProfile: Codable, Identifiable, Equatable {
   init(id: UUID = UUID(), name: String, hourlyRate: Int) {
     self.id = id
     self.name = Self.lenientName(name)
-    self.hourlyRate = max(0, min(hourlyRate, 1_000_000))
+    self.hourlyRate = Self.clampRate(hourlyRate)
   }
 
   static func committedName(_ name: String) -> String {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? defaultJobName : trimmed
+  }
+
+  static func clampRate(_ rate: Int) -> Int {
+    min(max(rate, 0), maxHourlyRate)
   }
 
   private static func lenientName(_ name: String) -> String {
@@ -97,9 +102,8 @@ final class SettingsManager: Sendable {
   }
 
   private var legacyCurrentJobName: String {
-    let value = defaults.string(forKey: SettingsKey.currentJobName.rawValue) ?? JobProfile.defaultJobName
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? JobProfile.defaultJobName : trimmed
+    JobProfile.committedName(
+      defaults.string(forKey: SettingsKey.currentJobName.rawValue) ?? JobProfile.defaultJobName)
   }
 
   private var storedSelectedJobProfileID: UUID? {
@@ -156,7 +160,7 @@ final class SettingsManager: Sendable {
     set {
       withLock {
         var job = selectedJobProfile
-        job.hourlyRate = max(0, min(newValue, 1_000_000))
+        job.hourlyRate = JobProfile.clampRate(newValue)
         updateJobProfile(job)
       }
     }
@@ -167,7 +171,7 @@ final class SettingsManager: Sendable {
     set {
       withLock {
         var job = selectedJobProfile
-        job = JobProfile(id: job.id, name: newValue, hourlyRate: job.hourlyRate)
+        job.name = newValue
         updateJobProfile(job)
       }
     }
@@ -212,15 +216,7 @@ final class SettingsManager: Sendable {
   var selectedJobProfile: JobProfile {
     withLock {
       let profiles = currentProfiles()
-      let id: UUID
-      if let stored = storedSelectedJobProfileID,
-        profiles.contains(where: { $0.id == stored })
-      {
-        id = stored
-      } else {
-        id = profiles[0].id
-      }
-      return profiles.first { $0.id == id } ?? profiles[0]
+      return profiles.first { $0.id == selectedJobProfileID } ?? profiles[0]
     }
   }
 
@@ -244,6 +240,10 @@ final class SettingsManager: Sendable {
     }
   }
 
+  var isEarningsEnabled: Bool {
+    hourlyRateEnabled && jobProfiles.contains { $0.hourlyRate > 0 }
+  }
+
   func deleteJobProfile(id: JobProfile.ID) {
     withLock {
       var profiles = currentProfiles()
@@ -254,10 +254,6 @@ final class SettingsManager: Sendable {
         defaults.set(profiles[0].id.uuidString, forKey: SettingsKey.selectedJobProfileID.rawValue)
       }
     }
-  }
-
-  var isEarningsEnabled: Bool {
-    hourlyRateEnabled && jobProfiles.contains { $0.hourlyRate > 0 }
   }
 
   private func currentProfiles() -> [JobProfile] {

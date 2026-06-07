@@ -138,7 +138,7 @@ struct EditEntryView: View {
   private static func filteredRateText(_ value: String) -> String {
     let filtered = value.filter { $0.isNumber }
     guard !filtered.isEmpty else { return "" }
-    return "\(min(Int(filtered) ?? 0, 1_000_000))"
+    return "\(JobProfile.clampRate(Int(filtered) ?? 0))"
   }
 
   private func syncRateForJobName(_ name: String) {

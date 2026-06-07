@@ -41,6 +41,17 @@ struct TimeEntry: Codable, Identifiable, Equatable {
     self.modifiedAt = nil
   }
 
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(UUID.self, forKey: .id)
+    clockIn = try container.decode(Date.self, forKey: .clockIn)
+    clockOut = try container.decode(Date.self, forKey: .clockOut)
+    jobName = JobProfile.committedName(try container.decodeIfPresent(String.self, forKey: .jobName) ?? JobProfile.defaultJobName)
+    hourlyRate = max(0, try container.decodeIfPresent(Int.self, forKey: .hourlyRate) ?? SettingsManager.shared.hourlyRate)
+    createdAt = try container.decode(Date.self, forKey: .createdAt)
+    modifiedAt = try container.decodeIfPresent(Date.self, forKey: .modifiedAt)
+  }
+
   /// For editing existing entries
   mutating func update(clockIn: Date, clockOut: Date, jobName: String, hourlyRate: Int) throws {
     guard clockOut > clockIn else {
@@ -53,20 +64,8 @@ struct TimeEntry: Codable, Identifiable, Equatable {
     self.modifiedAt = Date()
   }
 
-  // Custom Codable to handle computed properties
   private enum CodingKeys: String, CodingKey {
     case id, clockIn, clockOut, jobName, hourlyRate, createdAt, modifiedAt
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(UUID.self, forKey: .id)
-    clockIn = try container.decode(Date.self, forKey: .clockIn)
-    clockOut = try container.decode(Date.self, forKey: .clockOut)
-    jobName = JobProfile.committedName(try container.decodeIfPresent(String.self, forKey: .jobName) ?? JobProfile.defaultJobName)
-    hourlyRate = max(0, try container.decodeIfPresent(Int.self, forKey: .hourlyRate) ?? SettingsManager.shared.hourlyRate)
-    createdAt = try container.decode(Date.self, forKey: .createdAt)
-    modifiedAt = try container.decodeIfPresent(Date.self, forKey: .modifiedAt)
   }
 }
 

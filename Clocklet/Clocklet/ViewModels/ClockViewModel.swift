@@ -118,9 +118,12 @@ final class ClockViewModel {
       .map { (date: $0.key, entries: $0.value.sorted { $0.clockIn > $1.clockIn }) }
   }
 
-  /// Check if there's an incomplete session from crash
-  var hasIncompleteSession: Bool {
-    data.currentSession != nil
+  var oldestStatisticsMonth: Date? {
+    let oldestEntry = data.entries.min(by: { $0.clockIn < $1.clockIn })?.clockIn
+    let oldestSession = data.currentSession?.clockIn
+    let oldestDate = [oldestEntry, oldestSession].compactMap { $0 }.min()
+    guard let oldestDate else { return nil }
+    return monthStart(containing: oldestDate)
   }
 
   /// Get monthly statistics for the specified number of months ending at the target month.
@@ -218,14 +221,6 @@ final class ClockViewModel {
     }
 
     return statistics
-  }
-
-  var oldestStatisticsMonth: Date? {
-    let oldestEntry = data.entries.map(\.clockIn).min()
-    let oldestSession = data.currentSession?.clockIn
-    let oldestDate = [oldestEntry, oldestSession].compactMap { $0 }.min()
-    guard let oldestDate else { return nil }
-    return monthStart(containing: oldestDate)
   }
 
   private func totalsByMonth(now: Date, calendar: Calendar) -> [String: (seconds: Int, earnings: Int)] {

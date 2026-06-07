@@ -46,11 +46,11 @@ private struct ChartDataPoint: Identifiable {
 }
 
 private struct JobBreakdownPoint: Identifiable {
-  let id: String
   let jobName: String
   let totalSeconds: Int
   let totalEarnings: Int
 
+  var id: String { jobName }
   var totalDuration: TimeInterval { TimeInterval(totalSeconds) }
 }
 
@@ -198,7 +198,6 @@ struct StatisticsView: View {
     return totals
       .map {
         JobBreakdownPoint(
-          id: $0.key,
           jobName: $0.key,
           totalSeconds: $0.value.seconds,
           totalEarnings: $0.value.earnings
@@ -349,6 +348,18 @@ struct StatisticsView: View {
     .buttonStyle(.borderless)
   }
 
+  private func navigateBackward() {
+    guard canNavigateBackward else { return }
+    hoveredPoint = nil
+    timelineMonthOffset = effectiveTimelineMonthOffset + 1
+  }
+
+  private func navigateForward() {
+    guard canNavigateForward else { return }
+    hoveredPoint = nil
+    timelineMonthOffset = max(effectiveTimelineMonthOffset - 1, 0)
+  }
+
   private var emptyState: some View {
     VStack(spacing: 12) {
       Image(systemName: "chart.bar")
@@ -450,18 +461,6 @@ struct StatisticsView: View {
           }
         }
     }
-  }
-
-  private func navigateBackward() {
-    guard canNavigateBackward else { return }
-    hoveredPoint = nil
-    timelineMonthOffset = effectiveTimelineMonthOffset + 1
-  }
-
-  private func navigateForward() {
-    guard canNavigateForward else { return }
-    hoveredPoint = nil
-    timelineMonthOffset = max(effectiveTimelineMonthOffset - 1, 0)
   }
 
   private func summarySection(data: [ChartDataPoint]) -> some View {
